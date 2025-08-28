@@ -1,4 +1,3 @@
-
 import mne
 import time
 import numpy as np
@@ -10,9 +9,7 @@ import matplotlib.pyplot as plt
 sfreq = 100
 n_channels = 64
 ch_names = [f"Ch{i}" for i in range(1, n_channels + 1)]
-data = np.random.randn(n_channels, sfreq * 10)  # 10 seconds of random data
 info = mne.create_info(ch_names, sfreq, ch_types='eeg')
-raw_mock = mne.io.RawArray(data, info, first_samp=0)
 
 raw_edf = mne.io.read_raw_edf("/Users/carterlawrence/Downloads/S001R02.edf", preload=True)
 print(raw_edf)
@@ -22,7 +19,6 @@ lines = [ax.plot([], [])[0] for _ in range(n_channels)]
 ax.set_xlim(0, 500)   # show last 500 samples
 ax.set_ylim(-0.0005, 0.0005)    # adjust to your signal scale
 buffer = np.zeros((n_channels, 500))  # rolling window
-# If you had a real EDF, you would use:
 
 # --- Step 2: Create and start the PlayerLSL ---
 # Create a PlayerLSL from the MNE Raw object
