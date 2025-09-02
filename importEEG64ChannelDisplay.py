@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 # --- Step 1: Load EDF file ---
 raw_edf = mne.io.read_raw_edf("/Users/carterlawrence/Downloads/S001R02.edf", preload=True)
-sfreq = 100
+sfreq = 256
 n_channels = 64
 ch_names = [f"Ch{i}" for i in range(1, n_channels + 1)]
 info = mne.create_info(ch_names, sfreq, ch_types='eeg')
