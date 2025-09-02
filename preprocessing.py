@@ -1,40 +1,46 @@
 import mne
 
 # --- 1. Load raw EEG ---
-raw = mne.io.read_raw_fif("/Users/carterlawrence/Downloads/S001R02.edf", preload=True)  # or .edf/.bdf/.gdf
+raw = mne.io.read_raw_edf("/Users/carterlawrence/Downloads/S001R04.edf", preload=True)
 
-# --- 2. Resample ---
-if raw.info['sfreq'] > 500:
-    raw.resample(256)
+# map annotation codes to numeric event IDs
+event_id = {'T0': 0, 'T1': 1, 'T2': 2}
 
-# --- 3. Re-reference ---
-raw.set_eeg_reference('average')
+# convert annotations to events
+events, event_dict = mne.events_from_annotations(raw, event_id=event_id)
+print("Event dictionary:", event_dict)
 
-# --- 4. Notch filter (remove line noise) ---
-raw.notch_filter(freqs=[60, 120])
+# --- 2. Resample & filter ---
+raw.resample(256)                # optional, speeds things up
+raw.set_eeg_reference('average') # common average reference
+raw.notch_filter(freqs=[60, 120])# remove line noise
+raw.filter(8., 30., fir_design='firwin')  # keep mu/beta bands
 
-# --- 5. Band-pass filter (keep motor imagery bands) ---
-raw.filter(8., 30., fir_design='firwin')
-
-# --- 6. ICA for artifacts ---
+# --- 3. ICA artifact removal ---
+# run ICA
 ica = mne.preprocessing.ICA(n_components=20, random_state=97, method='fastica')
-ica.fit(raw.copy().filter(1., None))  # fit on wide band
-eog_inds, _ = ica.find_bads_eog(raw)  # detect eye blinks
-ica.exclude = eog_inds
-raw = ica.apply(raw)
+ica.fit(raw.copy().filter(1., None))  # wide-band for ICA
 
-# --- 7. Extract events from stim channel ---
-events = mne.find_events(raw, stim_channel='STI 014')
-event_id = {'left_hand': 1, 'right_hand': 2}  # adjust to your markers
+# plot components to inspect
+ica.plot_components()  # interactive GUI, pick which components to exclude
 
-# --- 8. Epoch the data ---
-epochs = mne.Epochs(raw, events, event_id=event_id,
-                    tmin=-0.5, tmax=3.0,
+# manually mark bad components
+ica.exclude = [0, 3]  # example: replace with indices of artifacts from plot
+
+# apply ICA
+raw_clean = ica.apply(raw.copy())
+
+# --- 4. Epoch data ---
+tmin, tmax = -0.5, 3.0  # 0.5s before cue to 3s after
+epochs = mne.Epochs(raw_clean, events, event_id=event_id,
+                    tmin=tmin, tmax=tmax,
                     baseline=None, preload=True)
 
-# --- 9. Drop noisy epochs ---
+# reject noisy epochs
 reject_criteria = dict(eeg=200e-6)  # 200 µV threshold
 epochs.drop_bad(reject=reject_criteria)
 
-# ✅ Now you have clean, labeled epochs ready for CSP
+# --- 5. Ready to use ---
 print(epochs)
+# epochs.get_data() → (n_trials, n_channels, n_times)
+# epochs.events[:,2] → labels
