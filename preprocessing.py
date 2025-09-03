@@ -1,5 +1,6 @@
 import mne
-
+import matplotlib.pyplot as plt
+import numpy as np
 # --- 1. Load raw EEG ---
 raw = mne.io.read_raw_edf("/Users/carterlawrence/Downloads/S001R04.edf", preload=True)
 
@@ -17,17 +18,17 @@ raw.notch_filter(freqs=[60, 120])# remove line noise
 raw.filter(8., 30., fir_design='firwin')  # keep mu/beta bands
 
 # --- 3. ICA artifact removal ---
-# run ICA
 ica = mne.preprocessing.ICA(n_components=20, random_state=97, method='fastica')
 ica.fit(raw.copy().filter(1., None))  # wide-band for ICA
 
-# plot components to inspect
-ica.plot_components()  # interactive GUI, pick which components to exclude
+# Instead of topomap plots (which require digitization),
+# just inspect ICA sources as time series:
+ica.plot_sources(raw)  
 
-# manually mark bad components
-ica.exclude = [0, 3]  # example: replace with indices of artifacts from plot
+# manually mark bad components (after inspecting plots)
+ica.exclude = []  # e.g. [0, 3]
 
-# apply ICA
+# apply ICA to clean data
 raw_clean = ica.apply(raw.copy())
 
 # --- 4. Epoch data ---
@@ -39,8 +40,32 @@ epochs = mne.Epochs(raw_clean, events, event_id=event_id,
 # reject noisy epochs
 reject_criteria = dict(eeg=200e-6)  # 200 µV threshold
 epochs.drop_bad(reject=reject_criteria)
+epochs.plot(n_epochs=10, n_channels=20, scalings='auto')
 
 # --- 5. Ready to use ---
 print(epochs)
 # epochs.get_data() → (n_trials, n_channels, n_times)
-# epochs.events[:,2] → labels
+# epochs.events[:, 2] → labels
+
+# Get the data: (n_epochs, n_channels, n_times)
+
+
+X = epochs.get_data()
+y = epochs.events[:, 2]  # labels
+
+# Plot the first epoch across channels
+for j in range(len(X)):
+    epoch_idx = j
+    data = X[epoch_idx] * 1e6  # scale to µV
+
+    fig, axes = plt.subplots(8, 8, figsize=(16, 16))
+    fig.subplots_adjust(hspace=0.596, wspace=0.263,left = 0.033,right=0.99,bottom=0.032,top=0.964)
+    axes = axes.flatten()
+
+    for i, ax in enumerate(axes[:data.shape[0]]):
+        ax.plot(data[i])
+        ax.set_title(f"{epochs.ch_names[i]} (label={y[epoch_idx]})")
+        ax.set_xlim(0, data.shape[1])
+
+    plt.show()
+
