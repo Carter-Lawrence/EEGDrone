@@ -43,29 +43,36 @@ epochs.drop_bad(reject=reject_criteria)
 epochs.plot(n_epochs=10, n_channels=20, scalings='auto')
 
 # --- 5. Ready to use ---
-print(epochs)
-# epochs.get_data() → (n_trials, n_channels, n_times)
-# epochs.events[:, 2] → labels
+#print(epochs)
+#epochs.get_data() → (n_trials, n_channels, n_times)
+#epochs.events[:, 2] → labels
 
 # Get the data: (n_epochs, n_channels, n_times)
 
+# get indices for those channels
 
+# Plot the first epoch across channels
 X = epochs.get_data()
 y = epochs.events[:, 2]  # labels
 
-# Plot the first epoch across channels
-for j in range(len(X)):
-    epoch_idx = j
+# choose channels of interest
+picks = ['C3..', 'C4..', 'Cz..', 'Fcz.', 'Fc3.', 'Fc4.', 'F3..', 'F4..', 'Fz.. ', 'Iz..']
+
+# get indices for those channels
+pick_idx = [epochs.ch_names.index(ch) for ch in picks if ch in epochs.ch_names]
+
+# loop through epochsx
+for epoch_idx in range(len(X)):
     data = X[epoch_idx] * 1e6  # scale to µV
 
-    fig, axes = plt.subplots(8, 8, figsize=(16, 16))
-    fig.subplots_adjust(hspace=0.596, wspace=0.263,left = 0.033,right=0.99,bottom=0.032,top=0.964)
+    fig, axes = plt.subplots(4, 4, figsize=(8, 12))  # 5x2 grid for 10 channels
+    fig.subplots_adjust(hspace=0.5, wspace=0.3, left=0.05, right=0.95, bottom=0.05, top=0.95)
     axes = axes.flatten()
 
-    for i, ax in enumerate(axes[:data.shape[0]]):
-        ax.plot(data[i])
-        ax.set_title(f"{epochs.ch_names[i]} (label={y[epoch_idx]})")
+    for i, ax in enumerate(axes[:len(pick_idx)]):
+        ch = pick_idx[i]
+        ax.plot(data[ch])
+        ax.set_title(f"{epochs.ch_names[ch]} (label={y[epoch_idx]})")
         ax.set_xlim(0, data.shape[1])
 
     plt.show()
-

@@ -1,0 +1,125 @@
+import mne
+import time
+import numpy as np
+from mne_lsl.player import PlayerLSL
+from mne_lsl.stream import StreamLSL
+import matplotlib.pyplot as plt
+
+# -------------------------------
+# 1. Load raw EDF and setup
+# -------------------------------
+raw_edf = mne.io.read_raw_edf("/Users/carterlawrence/Downloads/S001R04.edf", preload=True)
+sfreq = 256
+raw_edf.resample(sfreq)
+
+plot_channels = ['C3..', 'C4..', 'Cz..', 'Fcz.', 'Fc3.', 'Fc4.', 'F3..', 'F4..', 'Fz..', 'Iz..']
+plot_idx = [raw_edf.ch_names.index(ch) for ch in plot_channels]
+n_channels = len(raw_edf.ch_names)
+
+win_samples = 1500  # rolling buffer size in samples
+
+# -------------------------------
+# 2. Extract events
+# -------------------------------
+event_id = {'T0': 0, 'T1': 1, 'T2': 2}
+events, _ = mne.events_from_annotations(raw_edf, event_id=event_id)
+event_colors = {0: 'green', 1: 'blue', 2: 'red'}
+
+# -------------------------------
+# 3. Plotting setup
+# -------------------------------
+plt.ion()
+fig, axes = plt.subplots(5, 2 , figsize=(15, 8))
+axes = axes.flatten()
+lines = []
+buffer = np.zeros((n_channels, win_samples))
+
+# Pre-allocate lines for EEG channels
+for i, ax in enumerate(axes[:len(plot_idx)]):
+    line, = ax.plot(np.zeros(win_samples))
+    lines.append(line)
+    ax.set_ylim(-0.00025, 0.00025)
+    ax.set_xlim(0, win_samples)
+    ax.set_title(plot_channels[i])
+
+# Pre-allocate vertical lines for events
+max_events_shown = 10
+event_lines = []
+for ax in axes[:len(plot_idx)]:
+    lines_for_ax = []
+    for _ in range(max_events_shown):
+        line = ax.axvline(0, color='red', linestyle='--', alpha=0.7, visible=False)
+        lines_for_ax.append(line)
+    event_lines.append(lines_for_ax)
+
+# -------------------------------
+# 4. Start PlayerLSL
+# -------------------------------
+player = PlayerLSL(raw_edf, chunk_size=32)
+player.start()
+time.sleep(1)
+stream = StreamLSL(stype='eeg', bufsize=0.5).connect()
+print(f"Connected to LSL stream: {stream.name}")
+
+# -------------------------------
+# 5. Real-time acquisition & preprocessing
+# -------------------------------
+try:
+    duration = 120
+    sample_counter = 0  # running count of samples streamed
+
+    while (sample_counter / sfreq) < duration:
+        latest_data, timestamps = stream.get_data()
+        if latest_data is not None and latest_data.size > 0:
+
+            # --- Preprocessing ---
+            # Bandpass 8-30 Hz
+            for ch in range(latest_data.shape[0]):
+                latest_data[ch] = mne.filter.filter_data(
+                    latest_data[ch], sfreq=sfreq, l_freq=8., h_freq=30.,
+                    method='iir', verbose=False
+                )
+            # Notch 60 Hz and 120 Hz
+            latest_data = mne.filter.notch_filter(latest_data, sfreq, freqs=[60], method='iir', verbose=False)
+            latest_data = mne.filter.notch_filter(latest_data, sfreq, freqs=[120], method='iir', verbose=False)
+
+            # --- Update rolling buffer ---
+            n_new = latest_data.shape[1]
+            sample_counter += n_new
+            buffer = np.hstack([buffer[:, n_new:], latest_data])
+
+            # Current rolling window in sample indices
+            window_start = sample_counter - win_samples
+            window_end = sample_counter
+
+            # --- Update plots ---
+            for i, idx in enumerate(plot_idx):
+                # Update EEG line
+                lines[i].set_ydata(buffer[idx])
+                lines[i].set_xdata(np.arange(buffer.shape[1]))
+
+                # Update event markers
+                visible_events = []
+                for ev in events:
+                    sample_idx, _, code = ev
+                    if window_start <= sample_idx <= window_end:
+                        buffer_idx = sample_idx - window_start
+                        visible_events.append((buffer_idx, code))
+
+                for j, line in enumerate(event_lines[i]):
+                    if j < len(visible_events):
+                        buffer_idx, code = visible_events[j]
+                        line.set_xdata([buffer_idx, buffer_idx])
+                        line.set_color(event_colors[code])
+                        line.set_visible(True)
+                    else:
+                        line.set_visible(False)
+
+            plt.pause(0.01)
+
+except KeyboardInterrupt:
+    print("Stopped by user.")
+
+finally:
+    player.stop()
+    print("PlayerLSL stopped.")
