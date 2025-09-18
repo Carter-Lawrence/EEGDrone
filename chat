@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 # -------------------------------
 # 1. Load raw EDF and setup
-# -------------------------------
+# ------------------------------- 
 raw_edf = mne.io.read_raw_edf("/Users/carterlawrence/Downloads/S001R04.edf", preload=True)
 sfreq = 256
 raw_edf.resample(sfreq)

@@ -1,0 +1,15 @@
+import glob
+
+base_path = "/Users/carterlawrence/Downloads/files"
+wanted_runs = ["R04", "R08", "R12"]  # motor imagery runs
+
+edf_files = []
+for subj in range(1, 110):  # S001 → S109
+    subj_folder = f"{base_path}/S{str(subj).zfill(3)}"
+    for run in wanted_runs:
+        file = f"{subj_folder}/S{str(subj).zfill(3)}{run}.edf"
+        edf_files.append(file)
+
+# Check a few
+for f in edf_files:
+    print(f)
