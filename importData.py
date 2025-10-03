@@ -11,7 +11,6 @@ ch_names = [f"Ch{i}" for i in range(1, n_channels + 1)]
 info = mne.create_info(ch_names, sfreq, ch_types='eeg')
 
 raw_edf = mne.io.read_raw_edf("/Users/carterlawrence/Downloads/S001R04.edf", preload=True)
-print(raw_edf)
 
 #Plotting Section
 plt.ion()

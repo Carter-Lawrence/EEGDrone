@@ -19,7 +19,7 @@ event_id = {'T1': 1, 'T2': 2}
 all_X, all_y, all_subjects = [], [], []
 base_path = r"/Users/carterlawrence/Downloads/files"
 wanted_runs = ["R03", "R04", "R07", "R08", "R11","R12"]
-#mne.set_log_level('ERROR')
+mne.set_log_level('ERROR')
 for subj in range(1, 110):
     subj_folder = f"{base_path}/S{str(subj).zfill(3)}"
     output = "File number: " + str(subj)
@@ -141,11 +141,21 @@ def EEGNet(nb_classes, Chans, Samples, dropoutRate=0.5):
 model = EEGNet(nb_classes=y_all_cat.shape[1], Chans=X_all.shape[1], Samples=X_all.shape[2])
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
+lr_schedule = ReduceLROnPlateau(monitor="val_loss", 
+                                factor=0.5,  # reduce LR by half
+                                patience=10, # wait 10 epochs before reducing
+                                min_lr=1e-6)
+
+early_stop = EarlyStopping(monitor="val_loss", 
+                           patience=20,   # stop if no improvement
+                           restore_best_weights=True)
+
+
 trains = model.fit(X_all, y_all_cat, 
                     batch_size=32, 
                     epochs=100, 
                     validation_split=0.2,
-                    verbose=1)#try to change learning rate at some point (probably change inside the actual model)
+                    verbose=1,callbacks = [lr_schedule, early_stop])#try to change learning rate at some point (probably change inside the actual model)
 
 test_loss, test_acc = model.evaluate(X_all, y_all_cat)
 model.save("eegnet_model.h5")
