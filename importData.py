@@ -18,7 +18,7 @@ fig, ax = plt.subplots()
 lines = [ax.plot([], [])[0] for _ in range(n_channels)]
 ax.set_xlim(0, 500)   # show last 500 samples
 ax.set_ylim(-0.00035, 0.00035)    # adjust to your signal scale
-buffer = np.zeros((n_channels, 500))  # rolling window
+buffer = np.zeros((n_channels, 500))  # rolling window  
 
 # --- Step 2: Create and start the PlayerLSL ---
 # Create a PlayerLSL from the MNE Raw object

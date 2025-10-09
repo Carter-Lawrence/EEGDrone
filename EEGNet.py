@@ -11,7 +11,7 @@ from tensorflow.keras.layers import Activation
 
 
 sfreq = 256
-tmin, tmax = -0.5, 3.0
+tmin, tmax = -0.5,1.5
 baseline = (None, 0)
 reject_criteria = dict(eeg=200e-6)
 event_id = {'T1': 1, 'T2': 2}
