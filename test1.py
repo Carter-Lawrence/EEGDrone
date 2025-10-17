@@ -12,7 +12,7 @@ movement_model = load_model("eegnet_movement_model.h5", compile=False)  # rest v
 type_model = load_model("eegnet_model_workingMVP.h5", compile=False)   # left vs right
 
 # --- Load EDF and start streaming ---
-raw = mne.io.read_raw_edf("/Users/carterlawrence/Downloads/S001R04.edf", preload=True)
+raw = mne.io.read_raw_edf("/Users/carterlawrence/Downloads/S00109R04.edf", preload=True)
 player = PlayerLSL(raw, chunk_size=32)
 player.start()
 time.sleep(1)
