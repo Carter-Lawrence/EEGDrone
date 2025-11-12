@@ -6,17 +6,30 @@ from keras.layers import (Input, Conv2D, DepthwiseConv2D, SeparableConv2D,
                           AveragePooling2D, Dropout, Dense, Flatten, BatchNormalization, Activation)
 from keras.constraints import max_norm
 from keras.utils import to_categorical
+from keras.layers import (Input, Conv2D, BatchNormalization, DepthwiseConv2D,
+                                     Activation, AveragePooling2D, Dropout, SeparableConv2D,
+                                     Flatten, Dense, Permute, Reshape, Lambda,
+                                     Bidirectional, LSTM, Layer, Multiply, GlobalAveragePooling2D,
+                                     GlobalAveragePooling1D)
+from keras.constraints import max_norm
+from keras.models import Model
+from keras.optimizers import AdamW
+from keras.callbacks import EarlyStopping, ModelCheckpoint
+from keras.layers import Lambda, Dense, Reshape, Multiply
+from keras import backend as K
+from keras.layers import LSTM, Bidirectional
+import keras.backend as K
 # ----------------------------
 # PARAMETERS
 # ----------------------------
 sfreq = 256
-tmin, tmax = 0.0, 3.0
+tmin, tmax = -0.25, 1
 baseline = (0, 0)
 reject_criteria = dict(eeg=200e-6)
-event_id = {'T1': 1, 'T2': 1, 'T0':0}
+event_id = {'T1': 1, 'T2': 1, 'T0': 0}
 
 base_path = "/Users/carterlawrence/Downloads/preprocessed_eeg"
-wanted_runs = ["R04", "R08","R12","R03", "R07","R11"]
+wanted_runs = ["R04", "R08","R12"]
 mne.set_log_level('ERROR')
 
 all_X, all_y, all_subjects = [], [], []
@@ -64,7 +77,7 @@ print("Preprocessing Done")
 def EEGNet(nb_classes, Chans, Samples, dropoutRate=0.5):
     input_main = Input(shape=(Chans, Samples, 1))
     
-    block1 = Conv2D(8, (1, 64), padding='same', use_bias=False, kernel_constraint=max_norm(2.))(input_main)
+    block1 = Conv2D(16, (1, 64), padding='same', use_bias=False, kernel_constraint=max_norm(2.))(input_main)
     block1 = BatchNormalization()(block1)
     block1 = DepthwiseConv2D((Chans, 1), depth_multiplier=4, use_bias=False, depthwise_constraint=max_norm(1.))(block1)
     block1 = BatchNormalization()(block1)
@@ -72,7 +85,7 @@ def EEGNet(nb_classes, Chans, Samples, dropoutRate=0.5):
     block1 = AveragePooling2D((1, 4))(block1)
     block1 = Dropout(dropoutRate)(block1)
 
-    block2 = SeparableConv2D(16, (1, 16), padding='same', use_bias=False,
+    block2 = SeparableConv2D(32, (1, 16), padding='same', use_bias=False,
                              depthwise_constraint=max_norm(1.),
                              pointwise_constraint=max_norm(1.))(block1)
     block2 = BatchNormalization()(block2)
@@ -80,11 +93,13 @@ def EEGNet(nb_classes, Chans, Samples, dropoutRate=0.5):
     block2 = AveragePooling2D((1, 8))(block2)
     block2 = Dropout(dropoutRate)(block2)
 
-    flatten = Flatten()(block2)
-    dense1 = Dense(64, activation='elu', kernel_constraint=max_norm(0.25))(flatten)
-    dense1 = Dropout(0.5)(dense1)
-    dense2 = Dense(nb_classes, kernel_constraint=max_norm(0.25))(dense1)
+    flatten = Flatten()(block2) 
+    dense1 = Dense(64, activation='elu', kernel_constraint=max_norm(0.25))(flatten) 
+    dense1 = Dropout(0.5)(dense1) 
+    
+    dense2 = Dense(nb_classes, kernel_constraint=max_norm(0.25))(dense1) 
     softmax = Activation('softmax')(dense2)
+
     return Model(inputs=input_main, outputs=softmax)
 
 model = EEGNet(nb_classes=y_all_cat.shape[1], Chans=X_all.shape[1], Samples=X_all.shape[2])
@@ -92,5 +107,4 @@ model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accur
 
 model.fit(X_all, y_all_cat, batch_size=32, epochs=100, validation_split=0.2, verbose=1)
 test_loss, test_acc = model.evaluate(X_all, y_all_cat)
-model.save("eegnet_M.h5")
-print("Test accuracy:", test_acc)
+model.save("eegnet_M_1.h5")
