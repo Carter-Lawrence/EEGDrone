@@ -1,11 +1,10 @@
 import numpy as np
 import tensorflow as tf
 import mne
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import (Input, Conv2D, DepthwiseConv2D, SeparableConv2D,
-                                     AveragePooling2D, Dropout, Dense, Flatten, BatchNormalization, Activation)
-from tensorflow.keras.constraints import max_norm
-from tensorflow.keras.utils import to_categorical
+from keras.models import Model
+from keras.layers import (Input, Conv2D, DepthwiseConv2D, SeparableConv2D, AveragePooling2D, Dropout, Dense, Flatten, BatchNormalization, Activation)
+from keras.constraints import max_norm
+from keras.utils import to_categorical
 import asrpy
 import os
 # ----------------------------
@@ -18,14 +17,14 @@ reject_criteria = dict(eeg=200e-6)
 event_id = {'T1': 0, 'T2': 1}
 
 base_path = "/Users/carterlawrence/Downloads/"
-save_base = f"{base_path}preprocessed_eeg"
+save_base = f"{base_path}preprocessed_eeg_V2"
 wanted_runs = [ "R04","R08", "R12"]
 mne.set_log_level('ERROR')
 
 all_X, all_y, all_subjects = [], [], []
 
 
-for subj in range(109,110):  # exclude subj 109 for testing
+for subj in range(0,110):  # exclude subj 109 for testing
     subj_str = f"S{str(subj).zfill(3)}" 
     subj_folder = f"{base_path}files/{subj_str}"
     save_folder = f"{save_base}/{subj_str}"
@@ -36,7 +35,7 @@ for subj in range(109,110):  # exclude subj 109 for testing
     raw_baseline = mne.io.read_raw_edf(file_baseline, preload=True, verbose=False)
     raw_baseline.resample(sfreq, verbose=False)
     raw_baseline.set_eeg_reference('average', verbose=False)
-    raw_baseline.filter(1., 40., fir_design='firwin', verbose=False)
+    raw_baseline.filter(8., 30., fir_design='firwin', verbose=False)
 # ensure block-aligned data
     raw_baseline.crop(tmax=(raw_baseline.n_times // 4096 * 4096 - 1) / raw_baseline.info['sfreq'])
     asr = asrpy.ASR(sfreq=sfreq, cutoff=20)

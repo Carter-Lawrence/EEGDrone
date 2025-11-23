@@ -14,6 +14,9 @@ type_model = load_model("eegnet_C_1.h5", compile=False)      # left vs right
 
 # --- Load EDF and start streaming ---
 raw = mne.io.read_raw_edf("/Users/carterlawrence/Downloads/files/S109/S109R04.edf", preload=True)
+event_id = {'T1': 1, 'T2': 2, 'T0': 0}
+events, event_dict = mne.events_from_annotations(raw, event_id=event_id)
+print(events)
 player = PlayerLSL(raw, chunk_size=32)
 player.start()
 time.sleep(1)
@@ -27,7 +30,7 @@ print(f"Connected to LSL stream: {stream.name}")
 sfreq = 256
 n_channels = len(raw.ch_names)
 window_samples = 321    # 3-second window → 768 samples
-stride_samples = int(0.5 * sfreq)       # slide forward 0.5 s → 128 samples
+stride_samples = int(0.25 * sfreq)       # slide forward 0.5 s → 128 samples
 buffer_proc = np.zeros((n_channels, window_samples))
 
 # --- Fit ASR baseline ---
@@ -40,6 +43,8 @@ asr = asrpy.ASR(sfreq=sfreq, cutoff=20)
 asr.fit(baseline_raw)
 print("ASR fitted on baseline.")
 
+sample_end = 0
+sample_beginning = 0 - stride_samples
 # --- Preprocessing for EEGNet ---
 def preprocess_for_model(data):
     data = (data - data.mean(axis=1, keepdims=True)) / (data.std(axis=1, keepdims=True) + 1e-6)
@@ -49,6 +54,8 @@ print("Starting live prediction loop...\n")
 
 try:
     while True:
+        sample_end += stride_samples
+        sample_beginning += stride_samples
         # --- get latest 0.5 s of new data ---
         latest_data, timestamps = stream.get_data(winsize=stride_samples)
 
@@ -88,7 +95,7 @@ try:
         move_class = np.argmax(move_pred)
         move_conf = move_pred[move_class]
 
-        if move_class == 0 or move_conf < 0.75:
+        if move_class == 0 or move_conf < 0.7:
             # Treat as REST if below confidence threshold
             print(f"[{time_str}] REST  (conf: {move_conf:.2f})")
         else:
@@ -96,12 +103,20 @@ try:
             type_pred = type_model.predict(model_input, verbose=0)[0]
             type_class = np.argmax(type_pred)
             type_conf = type_pred[type_class]
-            if type_conf > 0.75:
+            if type_conf > 0.8:
                 direction = "LEFT" if type_class == 0 else "RIGHT"
                 print(f"[{time_str}] MOVEMENT → {direction}  (conf: {type_conf:.2f})")
-
+        
+        for effect_sample in events:
+            if sample_beginning < effect_sample[0] < sample_end:
+                if effect_sample[2] == 0:
+                    print("ACTUAL MOVEMENT: REST")
+                if effect_sample[2] == 1:
+                    print("ACTUAL MOVEMENT: LEFT")  
+                if effect_sample[2] == 2:
+                    print("ACTUAL MOVEMENT: RIGHT")  
         # --- wait until next 0.5 s stride ---
-        time.sleep(0.25)
+        time.sleep(0.05)
 
 except KeyboardInterrupt:
     print("\nStopped by user.")

@@ -18,7 +18,6 @@ from keras.callbacks import EarlyStopping, ModelCheckpoint
 from keras.layers import Lambda, Dense, Reshape, Multiply
 from keras import backend as K
 from keras.layers import LSTM, Bidirectional
-import keras.backend as K
 # ----------------------------
 # PARAMETERS
 # ----------------------------
