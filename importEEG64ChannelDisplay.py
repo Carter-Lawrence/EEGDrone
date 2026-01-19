@@ -6,7 +6,7 @@ from mne_lsl.stream import StreamLSL
 import matplotlib.pyplot as plt
 
 # --- Step 1: Load EDF file ---
-raw_edf = mne.io.read_raw_edf("/Users/carterlawrence/Downloads/S001R02.edf", preload=True)
+raw_edf = mne.io.read_raw_fif("/Users/carterlawrence/Downloads/preprocessed_eeg_V2/S001/S001R04_clean_raw.fif", preload=True)
 sfreq = 256
 n_channels = 64
 ch_names = [f"Ch{i}" for i in range(1, n_channels + 1)]
