@@ -14,13 +14,13 @@ sfreq = 256
 
 base_path = "/Users/carterlawrence/Downloads/"
 save_base = f"{base_path}preprocessed_eeg_V3"
-wanted_runs = ["R04","R08", "R12"]
+wanted_runs = ["R04","R08", "R12", "R03","R07", "R11"]
 mne.set_log_level('ERROR')
 
 all_X, all_y, all_subjects = [], [], []
 
 
-for subj in range(1,2):  # exclude subj 109 for testing
+for subj in range(1,109):  # exclude subj 109 for testing
     subj_str = f"S{str(subj).zfill(3)}" 
     subj_folder = f"{base_path}files/{subj_str}"
     save_folder = f"{save_base}/{subj_str}"
@@ -34,7 +34,7 @@ for subj in range(1,2):  # exclude subj 109 for testing
     raw_baseline.filter(8., 30., fir_design='firwin', verbose=False)
 # ensure block-aligned data
     raw_baseline.crop(tmax=(raw_baseline.n_times // 4096 * 4096 - 1) / raw_baseline.info['sfreq'])
-    asr = asrpy.ASR(sfreq=sfreq, cutoff=10)
+    asr = asrpy.ASR(sfreq=sfreq, cutoff=20)
     asr.fit(raw_baseline)
     print(f"{subj_str}...")
     for run in wanted_runs:
@@ -50,6 +50,7 @@ for subj in range(1,2):  # exclude subj 109 for testing
                 raw.set_eeg_reference('average', verbose=False)
                 raw.filter(8., 30., fir_design='firwin', verbose=False)
                 raw_clean = asr.transform(raw)
+                raw_clean.crop(tmin=1, tmax=raw_clean.times[-1] - 1)
 
                 # Save preprocessed file
                 raw_clean.save(save_file, overwrite=True)

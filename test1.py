@@ -3,52 +3,64 @@ import numpy as np
 import time
 from mne_lsl.player import PlayerLSL
 from mne_lsl.stream import StreamLSL
-from mne.filter import notch_filter, filter_data
+from mne.filter import filter_data
 from keras.models import load_model
 from datetime import datetime
-import asrpy
+from collections import deque
 
 # --- Load trained models ---
-movement_model = load_model("eegnet_M_1.h5", compile=False)  # rest vs movement
-type_model = load_model("eegnet_C_1.h5", compile=False)      # left vs right
+movement_model = load_model("eegnet_M_New.h5", compile=False)
+type_model = load_model("eegnet_LR_3.h5", compile=False)
 
 # --- Load EDF and start streaming ---
 raw = mne.io.read_raw_edf("/Users/carterlawrence/Downloads/files/S109/S109R04.edf", preload=True)
 event_id = {'T1': 1, 'T2': 2, 'T0': 0}
 events, event_dict = mne.events_from_annotations(raw, event_id=event_id)
-print(events)
+
 player = PlayerLSL(raw, chunk_size=32)
 player.start()
 time.sleep(1)
 print("Streaming started...")
 
 # --- Connect to LSL stream ---
-stream = StreamLSL(stype='eeg', bufsize=1.25).connect()
+stream = StreamLSL(stype='eeg', bufsize=2.5).connect()
 print(f"Connected to LSL stream: {stream.name}")
 
 # --- Parameters ---
 sfreq = 256
 n_channels = len(raw.ch_names)
-window_samples = 321    # 3-second window → 768 samples
-stride_samples = int(0.25 * sfreq)       # slide forward 0.5 s → 128 samples
+window_samples = 640
+stride_samples = int(0.25 * sfreq)
 buffer_proc = np.zeros((n_channels, window_samples))
 
-# --- Fit ASR baseline ---
-baseline_raw = mne.io.read_raw_edf("/Users/carterlawrence/Downloads/files/S109/S109R02.edf", preload=True)
-baseline_raw.resample(sfreq, verbose=False)
-baseline_raw.set_eeg_reference('average', verbose=False)
-baseline_raw.filter(1., 40., fir_design='firwin', verbose=False)
-
-asr = asrpy.ASR(sfreq=sfreq, cutoff=20)
-asr.fit(baseline_raw)
-print("ASR fitted on baseline.")
-
 sample_end = 0
-sample_beginning = 0 - stride_samples
-# --- Preprocessing for EEGNet ---
+sample_beginning = -stride_samples
+
+# --- ADJUSTED THRESHOLDS ---
+MOVE_THRESHOLD_ON = 0.65    # Threshold to START movement
+MOVE_THRESHOLD_OFF = 0.30   # Much lower - allow temporary dips
+TYPE_THRESHOLD = 0.60       # Confidence for direction
+
+VOTE_WINDOW = 7             # Longer voting window
+MIN_MOVE_VOTES = 4          # Need 4/7 to start
+MIN_REST_VOTES = 5          # Need 5/7 LOW probabilities to end movement
+MIN_TYPE_VOTES = 4          # Need 4/7 for direction
+
+move_history = deque(maxlen=VOTE_WINDOW)
+type_history = deque(maxlen=VOTE_WINDOW)
+
+state = "REST"
+current_direction = None
+frames_in_movement = 0      # Track how long we've been in movement
+
+# --- Preprocessing ---
 def preprocess_for_model(data):
-    data = (data - data.mean(axis=1, keepdims=True)) / (data.std(axis=1, keepdims=True) + 1e-6)
-    return data[np.newaxis, ..., np.newaxis]  # (1, channels, samples, 1)
+    data = filter_data(data, sfreq, l_freq=8., h_freq=30., 
+                      method='fir', phase='zero', verbose=False)
+    data = (data - data.mean(axis=1, keepdims=True)) / (
+        data.std(axis=1, keepdims=True) + 1e-6
+    )
+    return data[np.newaxis, ..., np.newaxis]
 
 print("Starting live prediction loop...\n")
 
@@ -56,66 +68,92 @@ try:
     while True:
         sample_end += stride_samples
         sample_beginning += stride_samples
-        # --- get latest 0.5 s of new data ---
+        
         latest_data, timestamps = stream.get_data(winsize=stride_samples)
-
         if latest_data is None or latest_data.size == 0:
-            print("No more EEG data available — stream ended.")
+            print("Stream ended.")
             break
 
         n_new = latest_data.shape[1]
-
-        # --- slide window: drop oldest 0.5 s, add newest 0.5 s ---
         buffer_proc = np.hstack([buffer_proc[:, n_new:], latest_data])
-
-        # --- process current 3 s window ---
-        proc_window = buffer_proc.copy()
-        proc_window -= proc_window.mean(axis=0, keepdims=True)
-
-        # Apply ASR and filters
-        info = mne.create_info(ch_names=stream.info['ch_names'], sfreq=sfreq, ch_types='eeg')
-        raw_tmp = mne.io.RawArray(proc_window, info, verbose=False)
-        raw_tmp.set_eeg_reference('average', verbose=False)
-        raw_tmp = asr.transform(raw_tmp)
-        proc_window = raw_tmp.get_data()
-
-        #proc_window = notch_filter(proc_window, sfreq, freqs=[60], method='iir', verbose=False)
-        proc_window = filter_data(proc_window, sfreq, l_freq=8., h_freq=30., method='iir', verbose=False)
-
-        # pad to match model input (769)
-        #if proc_window.shape[1] == 321:
-        #    proc_window = np.pad(proc_window, ((0, 0), (0, 1)), mode='edge')
-
-        # --- model inference ---
-        model_input = preprocess_for_model(proc_window)
+        model_input = preprocess_for_model(buffer_proc.copy())
+        
         eeg_time = timestamps[-1]
         time_str = datetime.fromtimestamp(eeg_time).strftime("%H:%M:%S.%f")[:-3]
 
-        move_pred = movement_model.predict(model_input, verbose=0)[0]
-        move_class = np.argmax(move_pred)
-        move_conf = move_pred[move_class]
+        # --- Movement detection ---
+        move_prob = float(movement_model.predict(model_input, verbose=0)[0][0])
+        type_prob = float(type_model.predict(model_input, verbose=0)[0][0])
 
-        if move_class == 0 or move_conf < 0.7:
-            # Treat as REST if below confidence threshold
-            print(f"[{time_str}] REST  (conf: {move_conf:.2f})")
-        else:
-            # Only classify movement if confidence >= 75%
-            type_pred = type_model.predict(model_input, verbose=0)[0]
-            type_class = np.argmax(type_pred)
-            type_conf = type_pred[type_class]
-            if type_conf > 0.8:
-                direction = "LEFT" if type_class == 0 else "RIGHT"
-                print(f"[{time_str}] MOVEMENT → {direction}  (conf: {type_conf:.2f})")
+        if frames_in_movement % 4 == 0:  # Print every 4th frame to reduce spam
+            print(f"    DEBUG: type_prob={type_prob:.3f} (>0.5=RIGHT, <0.5=LEFT)")
+        # Vote on movement
+        move_history.append(1 if move_prob > MOVE_THRESHOLD_ON else 0)
+        move_votes = sum(move_history)
         
-        for effect_sample in events:
-            if sample_beginning < effect_sample[0] < sample_end:
-                if effect_sample[2] == 0:
-                    print("ACTUAL MOVEMENT: REST")
-                if effect_sample[2] == 1:
-                    print("ACTUAL MOVEMENT: LEFT")  
-                if effect_sample[2] == 2:
-                    print("ACTUAL MOVEMENT: RIGHT")  
-        # --- wait until next 0.5 s stride ---
+        # State machine with persistence
+        if state == "REST":
+            if move_votes >= MIN_MOVE_VOTES:
+                state = "MOVEMENT"
+                frames_in_movement = 0
+                print(f"[{time_str}] 🔵 MOVEMENT STARTED (move_prob={move_prob:.3f})")
+            else:
+                print(f"[{time_str}] REST (move_prob={move_prob:.3f}, votes={move_votes}/{VOTE_WINDOW})")
+        
+        else:  # state == "MOVEMENT"
+            frames_in_movement += 1
+            
+            # Count how many recent frames are BELOW threshold
+            rest_votes = sum(1 for p in move_history if p == 0)
+            
+            # Only exit if we've been in movement for at least 8 frames (2 seconds)
+            # AND we have strong evidence of rest
+            if frames_in_movement > 8 and rest_votes >= MIN_REST_VOTES:
+                state = "REST"
+                current_direction = None
+                type_history.clear()
+                frames_in_movement = 0
+                print(f"[{time_str}] ⚪ MOVEMENT ENDED → REST (move_prob={move_prob:.3f})")
+            else:
+                # Classify direction
+                type_prob = float(type_model.predict(model_input, verbose=0)[0][0])
+                
+                
+                # Vote on direction
+# To this (FLIPPED):
+                if type_prob > TYPE_THRESHOLD:
+                    type_history.append("LEFT")   # SWAPPED!
+                elif type_prob < (1 - TYPE_THRESHOLD):
+                    type_history.append("RIGHT")  # SWAPPED!
+                else:
+                    type_history.append("UNCERTAIN")
+                
+                # Determine majority direction
+                if len(type_history) > 0:
+                    votes = {"LEFT": type_history.count("LEFT"),
+                            "RIGHT": type_history.count("RIGHT"),
+                            "UNCERTAIN": type_history.count("UNCERTAIN")}
+                    
+                    direction = max(votes, key=votes.get)
+                    direction_votes = votes[direction]
+                    
+                    if direction != "UNCERTAIN" and direction_votes >= MIN_TYPE_VOTES:
+                        current_direction = direction
+                    
+                    if current_direction:
+                        print(f"[{time_str}] ➡️  MOVEMENT → {current_direction} "
+                              f"(move={move_prob:.2f}, type={type_prob:.2f}, "
+                              f"dur={frames_in_movement}, votes={direction_votes}/{VOTE_WINDOW})")
+                    else:
+                        print(f"[{time_str}] 🔄 MOVEMENT → STABILIZING "
+                              f"(move={move_prob:.2f}, type={type_prob:.2f}, dur={frames_in_movement})")
+        
+        # --- Ground truth ---
+        for event_sample, _, event_code in events:
+            if sample_beginning < event_sample < sample_end:
+                actual = {0: "REST", 1: "LEFT", 2: "RIGHT"}[event_code]
+                print(f"    *** ACTUAL: {actual} ***")
+        
         time.sleep(0.05)
 
 except KeyboardInterrupt:

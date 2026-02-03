@@ -19,6 +19,8 @@ from keras.layers import Lambda, Dense, Reshape, Multiply
 from keras import backend as K
 from keras.layers import LSTM, Bidirectional
 import keras.backend as K
+tf.keras.mixed_precision.set_global_policy('float32')
+
 # ----------------------------
 # PARAMETERS
 # ----------------------------
@@ -26,9 +28,9 @@ sfreq = 256
 tmin, tmax = -0.25, 1
 baseline = (0, 0)
 reject_criteria = dict(eeg=200e-6)
-event_id = {'T1': 0, 'T2': 1}
+event_id = {'T1': 1, 'T2': 1, 'T0': 0}
 
-base_path = "/Users/carterlawrence/Downloads/preprocessed_eeg"
+base_path = "/Users/carterlawrence/Downloads/preprocessed_eeg_V2"
 wanted_runs = ["R04", "R08","R12"]
 mne.set_log_level('ERROR')
 
@@ -71,12 +73,15 @@ y_all = np.concatenate(all_y, axis=0)
 subjects = np.concatenate(all_subjects)
 X_all = X_all[..., np.newaxis]
 y_all_cat = to_categorical(y_all, num_classes=2)  # adjust num_classes if needed
+y = y.astype("float32")
+np.mean(y_all)
+
 
 print("Preprocessing Done")
 
 def EEGNet(nb_classes, Chans, Samples, dropoutRate=0.5):
     input_main = Input(shape=(Chans, Samples, 1))
-    
+
     block1 = Conv2D(16, (1, 64), padding='same', use_bias=False, kernel_constraint=max_norm(2.))(input_main)
     block1 = BatchNormalization()(block1)
     block1 = DepthwiseConv2D((Chans, 1), depth_multiplier=4, use_bias=False, depthwise_constraint=max_norm(1.))(block1)
@@ -96,15 +101,25 @@ def EEGNet(nb_classes, Chans, Samples, dropoutRate=0.5):
     flatten = Flatten()(block2) 
     dense1 = Dense(64, activation='elu', kernel_constraint=max_norm(0.25))(flatten) 
     dense1 = Dropout(0.5)(dense1) 
-    
-    dense2 = Dense(nb_classes, kernel_constraint=max_norm(0.25))(dense1) 
-    softmax = Activation('softmax')(dense2)
 
-    return Model(inputs=input_main, outputs=softmax)
+    dense2 = Dense(1, kernel_constraint=max_norm(0.25))(dense1)  # change nb_classes → 1
+    output = Activation('sigmoid')(dense2)                        # use sigmoid instead of softmax
+
+    return Model(inputs=input_main, outputs=output)              # return the new output
+
 
 model = EEGNet(nb_classes=y_all_cat.shape[1], Chans=X_all.shape[1], Samples=X_all.shape[2])
-model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+metrics=[
+    "accuracy",
+    tf.keras.metrics.AUC(name="auc")
+]
 
-model.fit(X_all, y_all_cat, batch_size=32, epochs=100, validation_split=0.2, verbose=1)
+model.compile(
+    optimizer=tf.keras.optimizers.Adam(1e-3),
+    loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
+    metrics=metrics
+)
+
+model.fit(X_all, y_all, batch_size=32, epochs=100, validation_split=0.2, verbose=1)
 test_loss, test_acc = model.evaluate(X_all, y_all_cat)
-model.save("eegnet_C_1.h5")
+model.save("eegnet_M_2.h5")
