@@ -6,7 +6,7 @@ import os
 import numpy as np
 import tensorflow as tf
 import mne
-from tensorflow.keras.callbacks import ModelCheckpoint
+
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (Input, Conv2D, DepthwiseConv2D,
                                      SeparableConv2D, AveragePooling2D,
@@ -116,7 +116,18 @@ DATA_ROOT = "/Users/carterlawrence/Downloads/files"
 X_all, y_all, subject_ids = load_all_subjects(DATA_ROOT)
 
 # Binary labels: rest=0, movement=1
-y_binary = (y_all != 0).astype(np.int32)[:, np.newaxis]
+# ----------------------------
+# LEFT vs RIGHT LABELS
+# ----------------------------
+
+mask = (y_all == 1) | (y_all == 2)   # keep only left/right trials
+X_all = X_all[mask]
+y_lr = y_all[mask]
+subject_ids = subject_ids[mask]
+
+# Left = 1, Right = 0
+y_binary = (y_lr == 1).astype(np.int32)[:, np.newaxis]
+
 
 # ----------------------------
 # SUBJECT-WISE TRAIN / VAL SPLIT
@@ -180,36 +191,14 @@ class_weights = compute_class_weight(
 )
 
 class_weight_dict = {0: class_weights[0], 1: class_weights[1]}
-
-checkpoint = ModelCheckpoint(
-    "eegnet_LR_interrupt.h5",
-    monitor="val_loss",
-    save_best_only=True,
-    save_weights_only=False,
+history = model.fit(
+    train_ds,
+    validation_data=val_ds,
+    epochs=100,
+    callbacks=callbacks,
+    class_weight=class_weight_dict,
     verbose=1
 )
-
-callbacks = [
-    EarlyStopping(patience=10, restore_best_weights=True),
-    ReduceLROnPlateau(patience=5, factor=0.5, min_lr=1e-5),
-    checkpoint
-]
-
-try:
-    history = model.fit(
-        train_ds,
-        validation_data=val_ds,
-        epochs=100,
-        callbacks=callbacks,
-        class_weight=class_weight_dict,
-        verbose=1
-    )
-except KeyboardInterrupt:
-    print("\n Training interrupted by user (Ctrl+C). Saving model...")
-finally:
-    model.save("eegnet_LR_3.h5")
-    print(" Model saved as eegnet_LR_3.h5")
-
 
 # ----------------------------x
 # THRESHOLD TUNING (IMPORTANT)

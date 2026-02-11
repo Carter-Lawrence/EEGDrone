@@ -16,8 +16,8 @@ def load_all_subjects(root, segment_len=640):
 
             raw = mne.io.read_raw_edf(os.path.join(subj_dir, run),
                                       preload=True, verbose=False)
-            available_channels = [ch for ch in SELECTED_CHANNELS if ch in raw.ch_names]
-            raw.pick_channels(available_channels, ordered=True)
+            # available_channels = [ch for ch in SELECTED_CHANNELS if ch in raw.ch_names]
+            # raw.pick_channels(available_channels, ordered=True)
 
             raw.filter(8., 30., verbose=False)
 
