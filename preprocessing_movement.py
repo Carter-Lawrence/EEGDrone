@@ -14,7 +14,7 @@ sfreq = 256
 
 base_path = "/Users/carterlawrence/Downloads/"
 save_base = f"{base_path}preprocessed_eeg_V3"
-wanted_runs = ["R04","R08", "R12", "R03","R07", "R11"]
+wanted_runs = ["R03", "R04","R05", "R06", "R07","R08", "R09", "R10", "R11","R12"]
 mne.set_log_level('ERROR')
 
 all_X, all_y, all_subjects = [], [], []
@@ -25,17 +25,7 @@ for subj in range(1,109):  # exclude subj 109 for testing
     subj_folder = f"{base_path}files/{subj_str}"
     save_folder = f"{save_base}/{subj_str}"
     os.makedirs(save_folder, exist_ok=True)
-
-    # baseline
-    file_baseline = f"{subj_folder}/{subj_str}R02.edf"
-    raw_baseline = mne.io.read_raw_edf(file_baseline, preload=True, verbose=False)
-    raw_baseline.resample(sfreq, verbose=False)
-    raw_baseline.set_eeg_reference('average', verbose=False)
-    raw_baseline.filter(8., 30., fir_design='firwin', verbose=False)
 # ensure block-aligned data
-    raw_baseline.crop(tmax=(raw_baseline.n_times // 4096 * 4096 - 1) / raw_baseline.info['sfreq'])
-    asr = asrpy.ASR(sfreq=sfreq, cutoff=20)
-    asr.fit(raw_baseline)
     print(f"{subj_str}...")
     for run in wanted_runs:
         file = f"{subj_folder}/{subj_str}{run}.edf"
@@ -49,37 +39,11 @@ for subj in range(1,109):  # exclude subj 109 for testing
                 raw.resample(sfreq, verbose=False)
                 raw.set_eeg_reference('average', verbose=False)
                 raw.filter(8., 30., fir_design='firwin', verbose=False)
-                raw_clean = asr.transform(raw)
-                raw_clean.crop(tmin=1, tmax=raw_clean.times[-1] - 1)
+                raw.crop(tmin=1, tmax=raw.times[-1] - 1)
 
                 # Save preprocessed file
-                raw_clean.save(save_file, overwrite=True)
+                raw.save(save_file, overwrite=True)
 
             except Exception as e:
                 print(f"Error in {subj_str}{run}: {e}")
                 continue
-            '''
-        try:
-            events, event_dict = mne.events_from_annotations(raw_clean, event_id=event_id)
-            epochs = mne.Epochs(raw_clean, events, event_id=event_id,
-                                tmin=tmin, tmax=tmax, baseline=baseline,
-                                preload=True, reject=reject_criteria)
-
-            if len(epochs) == 0:
-                print(f"No epochs for {subj_str}{run}")
-                continue
-
-            X = epochs.get_data()
-            y = epochs.events[:, -1]
-
-            # z-score normalization per channel
-            X = (X - X.mean(axis=(0, 2), keepdims=True)) / (X.std(axis=(0, 2), keepdims=True) + 1e-6)
-
-            all_X.append(X)
-            all_y.append(y)
-            all_subjects.append(np.full(len(y), subj))
-        except Exception as e:
-            print(f"Error epoching {subj_str}{run}: {e}")
-            continue
-            '''
-    

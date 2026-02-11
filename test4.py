@@ -12,6 +12,7 @@ class Graph:
         self.board_id = board_shim.get_board_id()
         self.board_shim = board_shim
         self.exg_channels = BoardShim.get_exg_channels(self.board_id)
+        self.channel_names = BoardShim.get_eeg_names(self.board_id)
         self.sampling_rate = BoardShim.get_sampling_rate(self.board_id)
         self.update_speed_ms = 50
         self.window_size = 4
@@ -27,15 +28,18 @@ class Graph:
         timer.start(self.update_speed_ms)
         QtWidgets.QApplication.instance().exec()
 
+
     def _init_timeseries(self):
         self.plots = list()
         self.curves = list()
         for i in range(len(self.exg_channels)):
+            channel_name = self.channel_names[i]
+            print(f"Plot {i}: X-axis = Time (samples), Y-axis = {channel_name} (µV)")
             p = self.win.addPlot(row=i, col=0)
-            p.showAxis('left', False)
-            p.setMenuEnabled('left', False)
-            p.showAxis('bottom', False)
-            p.setMenuEnabled('bottom', False)
+            p.showAxis('left', True)
+            p.setMenuEnabled('left', True)
+            p.showAxis('bottom', True)
+            p.setMenuEnabled('bottom', True)
             if i == 0:
                 p.setTitle('TimeSeries Plot')
             self.plots.append(p)

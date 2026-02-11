@@ -70,7 +70,7 @@ def load_all_subjects(root, segment_len=640):
 # ----------------------------
 # EEGNET MODEL (REAL-TIME SAFE)
 # ----------------------------
-def EEGNet(nb_classes, Chans, Samples, dropoutRate=0.25):
+def EEGNet(nb_classes, Chans, Samples, dropoutRate=0.20):
     inputs = Input(shape=(Chans, Samples, 1))
 
     x = Conv2D(16, (1, 64), padding='same', use_bias=False)(inputs)
@@ -193,5 +193,3 @@ for t in [0.2, 0.3, 0.4, 0.5]:
 
 model.save("eegnet_LR_3.h5")
 
-# Use best threshold in real time:
-# movement = (model(x_window) > best_threshold)

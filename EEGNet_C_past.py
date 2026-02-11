@@ -31,7 +31,7 @@ reject_criteria = dict(eeg=200e-6)
 event_id = {'T1': 1, 'T2': 1, 'T0': 0}
 
 base_path = "/Users/carterlawrence/Downloads/preprocessed_eeg_V2"
-wanted_runs = ["R04", "R08","R12"]
+wanted_runs = ["R03", "R04","R05", "R06", "R07","R08", "R09", "R10", "R11","R12"]
 mne.set_log_level('ERROR')
 
 all_X, all_y, all_subjects = [], [], []
