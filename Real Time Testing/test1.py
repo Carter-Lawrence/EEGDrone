@@ -9,8 +9,8 @@ from datetime import datetime
 from collections import deque
 
 # --- Load trained models ---
-movement_model = load_model("eegnet_M_New.h5", compile=False)
-type_model = load_model("eegnet_LR_3.h5", compile=False)
+movement_model = load_model("eegnet_MR_4.h5", compile=False)
+type_model = load_model("eegnet_LR_4.h5", compile=False)
 
 # --- Load EDF and start streaming ---
 raw = mne.io.read_raw_edf("/Users/carterlawrence/Downloads/files/S109/S109R04.edf", preload=True)

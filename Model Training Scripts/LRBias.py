@@ -58,7 +58,7 @@ print("test 123")
 # ----------------------------
 # LOAD MODEL
 # ----------------------------
-model = load_model("eegnet_LR_3.h5")
+model = load_model("eegnet_LR_4.h5")
 print("load model")
 # ----------------------------
 # SELECT ONLY LEFT vs RIGHT

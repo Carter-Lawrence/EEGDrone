@@ -57,7 +57,7 @@ print("test 123")
 # ----------------------------
 # LOAD MODEL
 # ----------------------------
-model = load_model("eegnet_M_New.h5")
+model = load_model("eegnet_MR_4.h5")
 print("load model")
 # ============================
 # MOVEMENT vs REST EVALUATION

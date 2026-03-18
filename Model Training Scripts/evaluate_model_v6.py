@@ -4,7 +4,7 @@ from sklearn.metrics import confusion_matrix, classification_report
 from load_data_v6 import load_all_subjects
 import mne
 
-TASK = "LR"   # "MR" or "LR"
+TASK = "MR"   # "MR" or "LR"
 mne.set_log_level('ERROR')
 tf.config.set_visible_devices([], 'GPU')
 # ------------------------
@@ -25,7 +25,7 @@ X = X[..., np.newaxis]
 # ------------------------
 # LOAD MODEL
 # ------------------------
-model = tf.keras.models.load_model("eegnet_LR_4.h5")
+model = tf.keras.models.load_model("eegnet_MR_4.h5")
 
 # ------------------------
 # PREDICT
