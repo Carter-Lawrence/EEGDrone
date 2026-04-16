@@ -54,13 +54,13 @@ EVENT_MAP = {"T0": 0, "T1": 1, "T2": 2}
 PATH         = "/Users/carterlawrence/Downloads/files/S001/S001R04.edf"
 SPEED        = 1.0
 NO_ARDUINO   = False
-ARDUINO_PORT = "/dev/cu.usbmodem1101"   # e.g. "/dev/cu.usbmodem14201"
+ARDUINO_PORT = "/dev/cu.usbmodem101"   # e.g. "/dev/cu.usbmodem14201"
 ARDUINO_BAUD = 9600
 WINDOW       = 6
 SHOW_GROUND  = True
 # ═════════════════════════════════════════════════════════════════════════════
 
-#Imma boop yo schmoopty
+
 class ArduinoLink:
     def __init__(self, port: str, baud: int = 9600, enabled: bool = True):
         self._ser      = None
@@ -562,7 +562,12 @@ class ReplayGraph:
 
 
 def main():
-    arduino  = ArduinoLink(ARDUINO_PORT, ARDUINO_BAUD, enabled=not NO_ARDUINO)
+    # In main(), after arduino connects:
+    arduino = ArduinoLink(ARDUINO_PORT, ARDUINO_BAUD, enabled=not NO_ARDUINO)
+    if arduino.connected:
+        time.sleep(0.5)        # let Arduino finish bootloader if needed
+        arduino.send(CMD_REST)
+        print("[Arduino] Centered.")
     replayer = EdfReplayer(PATH, speed=SPEED)
     engine   = PredictionEngine(replayer, arduino, show_ground=SHOW_GROUND)
 
