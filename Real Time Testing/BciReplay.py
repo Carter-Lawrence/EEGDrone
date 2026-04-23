@@ -32,15 +32,20 @@ except ImportError:
 # ═════════════════════════════════════════════════════════════════════════════
 #  CONFIGURATION
 # ═════════════════════════════════════════════════════════════════════════════
-MOVEMENT_MODEL_PATH    = "eegnet_MR_4.h5"
+MOVEMENT_MODEL_PATH    = "eegnet_MR_5.h5"
 TYPE_MODEL_PATH        = "eegnet_LR_4.h5"
 
-MOVE_THRESHOLD_ON      = 0.58   # nudge down from 0.62
-MOVE_THRESHOLD_OFF     = 0.52   # asymmetric: easier to stay in movement than enter
-MIN_MOVE_FRAMES        = 5      # keep — this is what's preventing FPs
-MIN_REST_FRAMES        = 6      # keep
-SMOOTH_WINDOW          = 12     # keep
-TYPE_THRESHOLD         = 0.50   # keep — this is now correct
+# Channel pick — MUST match the training scripts' PICK_CHANNELS and
+# bci_live.py's TRAINING_CHANNEL_ORDER (after mapping labels).
+# PhysioNet EEGMMI uses the trailing-dot 10-10 labels.
+PICK_CHANNELS = ["Fc3.", "Fcz.", "Fc4.", "C3..", "Cz..", "C4.."]
+
+MOVE_THRESHOLD_ON  = 0.5
+MOVE_THRESHOLD_OFF = 0.5
+MIN_MOVE_FRAMES        = 2      # keep — this is what's preventing FPs
+MIN_REST_FRAMES        = 2      # keep
+SMOOTH_WINDOW          = 8     # keep
+TYPE_THRESHOLD         = 0.5   # keep — this is now correct
 PREDICTION_WINDOW_SAMP = 640    # try 2.0s instead of 2.5s for faster response
 PREDICTION_STRIDE_SAMP = 64   # smaller = more predictions per second
 
@@ -51,10 +56,10 @@ CMD_RIGHT = b'2'
 LABEL_MAP = {0: "REST", 1: "LEFT", 2: "RIGHT"}
 EVENT_MAP = {"T0": 0, "T1": 1, "T2": 2}
 
-PATH         = "/Users/carterlawrence/Downloads/files/S001/S001R04.edf"
+PATH         = "/Users/carterlawrence/Downloads/files/S001/S001R03.edf"
 SPEED        = 1.0
 NO_ARDUINO   = False
-ARDUINO_PORT = "/dev/cu.usbmodem101"   # e.g. "/dev/cu.usbmodem14201"
+ARDUINO_PORT = "/dev/cu.usbmodem2101"   # e.g. "/dev/cu.usbmodem14201"
 ARDUINO_BAUD = 9600
 WINDOW       = 6
 SHOW_GROUND  = True
@@ -99,6 +104,17 @@ class EdfReplayer:
     def __init__(self, edf_path: str, speed: float = 1.0):
         print(f"[EDF] Loading {edf_path} …")
         raw = mne.io.read_raw_edf(edf_path, preload=True, verbose=False)
+
+        # ── Pick only the 6 training channels, in the exact training order ──
+        missing = [c for c in PICK_CHANNELS if c not in raw.ch_names]
+        if missing:
+            raise RuntimeError(
+                f"[EDF] EDF file is missing required channels {missing}. "
+                f"Available: {raw.ch_names[:10]}..."
+            )
+        raw.pick(PICK_CHANNELS)
+        print(f"[EDF] Picked {len(PICK_CHANNELS)} channels: {PICK_CHANNELS}")
+
         self.sfreq       = int(raw.info['sfreq'])
         self.ch_names    = raw.ch_names
         self.n_channels  = len(self.ch_names)
@@ -195,8 +211,20 @@ class PredictionEngine:
                 self._mv_model = load_model(MOVEMENT_MODEL_PATH, compile=False)
                 print("[Model] Loading type model …")
                 self._ty_model = load_model(TYPE_MODEL_PATH, compile=False)
+
+                # Sanity-check: model channel dim must match replayer channels
+                for name, m in [("movement", self._mv_model),
+                                ("type",     self._ty_model)]:
+                    expected = m.input_shape[1]
+                    if expected != self.n_channels:
+                        raise ValueError(
+                            f"{name} model expects {expected} channels, "
+                            f"replayer has {self.n_channels}. "
+                            f"Check PICK_CHANNELS matches training."
+                        )
                 self._models_ok = True
-                print("[Model] Both models loaded ✓")
+                print(f"[Model] Both models loaded ✓  "
+                      f"(input channels = {self.n_channels} ✓)")
             except Exception as e:
                 print(f"[Model] Load failed: {e}")
 
@@ -300,9 +328,10 @@ class PredictionEngine:
             else:
                 self._rest_counter = 0
                 # flipped mapping (corrected for label inversion)
-                if ts > TYPE_THRESHOLD:
+            # in _state_machine
+                if ts > 0.55:
                     direction = "RIGHT"
-                elif ts < (1 - TYPE_THRESHOLD):
+                elif ts < 0.45:
                     direction = "LEFT"
                 else:
                     direction = "UNCERTAIN"

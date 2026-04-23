@@ -1,5 +1,5 @@
 # ============================
-# REAL-TIME EEGNet BINARY BCI
+# REAL-TIME EEGNet BINARY BCI  —  LEFT vs RIGHT (6-channel)
 # ============================
 
 import os
@@ -23,6 +23,13 @@ mne.set_log_level('ERROR')
 tf.config.set_visible_devices([], 'GPU')
 
 # ----------------------------
+# CHANNEL CONFIG
+# ----------------------------
+# Must match bci_live.py TRAINING_CHANNEL_ORDER and the MR training script.
+# PhysioNet EEGMMI uses trailing-dot 10-10 labels (Fc3., Fcz., ...).
+PICK_CHANNELS = ["Fc3.", "Fcz.", "Fc4.", "C3..", "Cz..", "C4.."]
+
+# ----------------------------
 # DATA LOADING
 # ----------------------------
 def load_all_subjects(root, segment_len=640):
@@ -38,6 +45,7 @@ def load_all_subjects(root, segment_len=640):
 
             raw = mne.io.read_raw_edf(os.path.join(subj_dir, run),
                                       preload=True, verbose=False)
+            raw = raw.pick(PICK_CHANNELS)
             raw.filter(8., 30., verbose=False)
 
             data = raw.get_data()
@@ -115,11 +123,12 @@ DATA_ROOT = "/Users/carterlawrence/Downloads/files"
 
 X_all, y_all, subject_ids = load_all_subjects(DATA_ROOT)
 
-# Binary labels: rest=0, movement=1
+print(f"[Data] Loaded {X_all.shape[0]} segments, "
+      f"shape = {X_all.shape}  (expect C={len(PICK_CHANNELS)})")
+
 # ----------------------------
 # LEFT vs RIGHT LABELS
 # ----------------------------
-
 mask = (y_all == 1) | (y_all == 2)   # keep only left/right trials
 X_all = X_all[mask]
 y_lr = y_all[mask]
@@ -127,7 +136,6 @@ subject_ids = subject_ids[mask]
 
 # Left = 1, Right = 0
 y_binary = (y_lr == 1).astype(np.int32)[:, np.newaxis]
-
 
 # ----------------------------
 # SUBJECT-WISE TRAIN / VAL SPLIT
@@ -146,7 +154,7 @@ class_weights = compute_class_weight(
     classes=np.array([0, 1]),
     y=y_train.squeeze()
 )
-class_weight = {0: class_weights[0], 1: class_weights[1]}
+class_weight_dict = {0: class_weights[0], 1: class_weights[1]}
 
 # ----------------------------
 # DATASETS
@@ -182,25 +190,23 @@ callbacks = [
     ReduceLROnPlateau(patience=5, factor=0.5, min_lr=1e-5)
 ]
 
-from sklearn.utils.class_weight import compute_class_weight
+try:
+    history = model.fit(
+        train_ds,
+        validation_data=val_ds,
+        epochs=100,
+        callbacks=callbacks,
+        class_weight=class_weight_dict,
+        verbose=1
+    )
+except KeyboardInterrupt:
+    print("\n Training interrupted by user (Ctrl+C). Saving model...")
+finally:
+    model.save("eegnet_LR_5.h5")
+    print(" Model saved as eegnet_LR_5.h5")
 
-class_weights = compute_class_weight(
-    class_weight='balanced',
-    classes=np.array([0, 1]),
-    y=y_binary.squeeze()
-)
 
-class_weight_dict = {0: class_weights[0], 1: class_weights[1]}
-history = model.fit(
-    train_ds,
-    validation_data=val_ds,
-    epochs=100,
-    callbacks=callbacks,
-    class_weight=class_weight_dict,
-    verbose=1
-)
-
-# ----------------------------x
+# ----------------------------
 # THRESHOLD TUNING (IMPORTANT)
 # ----------------------------
 probs = model.predict(X_val)
@@ -210,5 +216,5 @@ for t in [0.2, 0.3, 0.4, 0.5]:
     acc = (preds == y_val).mean()
     print(f"Threshold {t:.2f} → accuracy {acc:.3f}")
 
-model.save("eegnet_LR_4.h5")
-
+model.save("eegnet_LR_5.h5")
+print("Saved: eegnet_LR_5.h5")

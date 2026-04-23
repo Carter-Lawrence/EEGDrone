@@ -47,20 +47,38 @@ except ImportError:
 
 # ═════════════════════════════════════════════════════════════════════════════
 #  CONFIGURATION  (edit here or pass as CLI args)
+#  — synced to BciReplay.py —
 # ═════════════════════════════════════════════════════════════════════════════
-MOVEMENT_MODEL_PATH    = "eegnet_MR_4.h5"
+MOVEMENT_MODEL_PATH    = "eegnet_MR_5.h5"
 TYPE_MODEL_PATH        = "eegnet_LR_4.h5"
 
-MOVE_THRESHOLD_ON      = 0.54
-MOVE_THRESHOLD_OFF     = 0.54
-TYPE_THRESHOLD         = 0.58
+MOVE_THRESHOLD_ON      = 0.5
+MOVE_THRESHOLD_OFF     = 0.5
+MIN_MOVE_FRAMES        = 2
+MIN_REST_FRAMES        = 2
 SMOOTH_WINDOW          = 8
-MIN_MOVE_FRAMES        = 4
-MIN_REST_FRAMES        = 6
+TYPE_THRESHOLD         = 0.5     # dead zone set in state machine (0.45 / 0.55)
 
-PREDICTION_SFREQ       = 256   # must match training sfreq
-PREDICTION_WINDOW_SAMP = 640   # 2.5 s @ 256 Hz
-PREDICTION_STRIDE_SAMP = 64    # 0.25 s stride
+PREDICTION_SFREQ       = 256     # must match training sfreq
+PREDICTION_WINDOW_SAMP = 640     # 2.5 s @ 256 Hz
+PREDICTION_STRIDE_SAMP = 64      # 0.25 s stride
+
+# ── CHANNEL MAPPING ─────────────────────────────────────────────────────────
+# Must match the electrode order used in mne.pick() during training AND
+# the physical wiring of your Cyton headset.
+#
+# Cyton pin index (0-based, pin N1P → 0) → EEG 10-10 label
+CYTON_CHANNEL_MAP = {
+    0: "FC3",   # pin N1P
+    1: "FCz",   # pin N2P
+    2: "FC4",   # pin N3P
+    3: "C3",    # pin N4P
+    4: "Cz",    # pin N5P
+    5: "C4",    # pin N6P
+}
+# Order in which electrodes were fed to the model during training.
+# This is the order rows must appear in when passed to .predict().
+TRAINING_CHANNEL_ORDER = ["FC3", "FCz", "FC4", "C3", "Cz", "C4"]
 
 # Arduino command bytes
 CMD_REST  = b'0'
@@ -124,15 +142,39 @@ class ArduinoLink:
 class PredictionEngine:
     """Runs EEGNet inference in a background thread and drives Arduino output."""
 
-    def __init__(self, board_shim, n_channels: int, sfreq: float,
+    def __init__(self, board_shim, exg_channels, sfreq: float,
                  arduino: ArduinoLink):
-        self.board_shim  = board_shim
-        self.n_channels  = n_channels
-        self.sfreq       = sfreq
-        self.arduino     = arduino
-        self.running     = False
+        self.board_shim   = board_shim
+        self.exg_channels = list(exg_channels)   # BrainFlow row indices for each pin
+        self.sfreq        = sfreq
+        self.arduino      = arduino
+        self.running      = False
 
-        self._buf       = np.zeros((n_channels, PREDICTION_WINDOW_SAMP))
+        # ── Build the channel-reorder index map ──────────────────────────
+        # Goal: produce an array of BrainFlow row indices such that
+        # self._buf[i] corresponds to TRAINING_CHANNEL_ORDER[i].
+        label_to_pin = {v: k for k, v in CYTON_CHANNEL_MAP.items()}
+        self._training_pins = []      # Cyton pin indices in training order
+        self._training_rows = []      # BrainFlow row indices in training order
+        for label in TRAINING_CHANNEL_ORDER:
+            if label not in label_to_pin:
+                raise ValueError(
+                    f"[ChannelMap] '{label}' in TRAINING_CHANNEL_ORDER "
+                    f"has no entry in CYTON_CHANNEL_MAP"
+                )
+            pin = label_to_pin[label]
+            if pin >= len(self.exg_channels):
+                raise ValueError(
+                    f"[ChannelMap] Cyton pin {pin} (for '{label}') is out of "
+                    f"range — board reports only {len(self.exg_channels)} EXG channels"
+                )
+            self._training_pins.append(pin)
+            self._training_rows.append(self.exg_channels[pin])
+
+        self.n_channels = len(TRAINING_CHANNEL_ORDER)
+        self._print_channel_map()
+
+        self._buf       = np.zeros((self.n_channels, PREDICTION_WINDOW_SAMP))
         self._move_buf  = collections.deque(maxlen=SMOOTH_WINDOW)
         self._type_buf  = collections.deque(maxlen=SMOOTH_WINDOW)
         self._lock      = threading.Lock()
@@ -152,10 +194,34 @@ class PredictionEngine:
                 self._mv_model = load_model(MOVEMENT_MODEL_PATH, compile=False)
                 print("[Model] Loading type model …")
                 self._ty_model = load_model(TYPE_MODEL_PATH, compile=False)
+
+                # ── sanity-check model channel count ─────────────────────
+                # EEGNet input is (None, C, T, 1); channel dim is index 1.
+                for name, m in [("movement", self._mv_model),
+                                ("type",     self._ty_model)]:
+                    expected = m.input_shape[1]
+                    if expected != self.n_channels:
+                        raise ValueError(
+                            f"[Model] {name} model expects {expected} channels "
+                            f"but TRAINING_CHANNEL_ORDER has {self.n_channels}. "
+                            f"Retrain or fix the channel map."
+                        )
                 self._models_ok = True
-                print("[Model] Both models loaded ✓")
+                print("[Model] Both models loaded ✓  "
+                      f"(input channels = {self.n_channels} ✓)")
             except Exception as e:
                 print(f"[Model] Failed to load: {e}")
+
+    def _print_channel_map(self):
+        print("─" * 60)
+        print("  CHANNEL MAP  (training order → Cyton pin → BrainFlow row)")
+        print("─" * 60)
+        for i, label in enumerate(TRAINING_CHANNEL_ORDER):
+            pin  = self._training_pins[i]
+            row  = self._training_rows[i]
+            print(f"  model row {i}: {label:<5s}  "
+                  f"pin N{pin+1}P  →  brainflow row {row}")
+        print("─" * 60)
 
     def start(self):
         self.running = True
@@ -174,7 +240,9 @@ class PredictionEngine:
                 time.sleep(0.05)
                 continue
 
-            eeg = raw[:self.n_channels, -stride:]
+            # Pick rows in TRAINING_CHANNEL_ORDER so the model's spatial
+            # filters see each electrode in the row it was trained on.
+            eeg = raw[self._training_rows, -stride:]
             with self._lock:
                 self._buf = np.hstack([self._buf[:, stride:], eeg])
 
@@ -225,10 +293,12 @@ class PredictionEngine:
                 self._rest_counter = 0
 
                 # LEFT / RIGHT decision
-                if ts > TYPE_THRESHOLD:
-                    direction = "LEFT"
-                elif ts < (1 - TYPE_THRESHOLD):
+                # Current LR model convention: LEFT=0 (low prob), RIGHT=1 (high prob).
+                # Dead zone [0.45, 0.55] where direction is held.
+                if ts > 0.55:
                     direction = "RIGHT"
+                elif ts < 0.45:
+                    direction = "LEFT"
                 else:
                     direction = "UNCERTAIN"
 
@@ -279,16 +349,22 @@ class Graph:
                     "#bc8cff","#79c0ff","#56d364","#ffa657"]
 
     def __init__(self, board_shim, arduino: ArduinoLink):
-        self.board_shim   = board_shim
-        self.arduino      = arduino
-        bid               = board_shim.get_board_id()
-        self.exg_channels = BoardShim.get_exg_channels(bid)
-        self.ch_names     = BoardShim.get_eeg_names(bid)
-        self.sfreq        = BoardShim.get_sampling_rate(bid)
-        self.n_channels   = len(self.exg_channels)
-        self.num_points   = 4 * self.sfreq
+        self.board_shim        = board_shim
+        self.arduino           = arduino
+        bid                    = board_shim.get_board_id()
+        self.exg_channels      = BoardShim.get_exg_channels(bid)
+        self.sfreq             = BoardShim.get_sampling_rate(bid)
+        self.num_points        = 4 * self.sfreq
 
-        self.engine = PredictionEngine(board_shim, self.n_channels,
+        # Use the training channel order for the plot rows so the on-screen
+        # traces visually match what the model actually sees.
+        label_to_pin = {v: k for k, v in CYTON_CHANNEL_MAP.items()}
+        self.display_rows      = [self.exg_channels[label_to_pin[lbl]]
+                                  for lbl in TRAINING_CHANNEL_ORDER]
+        self.display_labels    = list(TRAINING_CHANNEL_ORDER)
+        self.n_channels        = len(self.display_rows)
+
+        self.engine = PredictionEngine(board_shim, self.exg_channels,
                                        self.sfreq, arduino)
         self.engine.start()
 
@@ -390,7 +466,7 @@ class Graph:
         sl.addWidget(self.move_val)
 
         sl.addSpacing(4)
-        sl.addWidget(lbl("TYPE PROB  (L > 0.5 > R)", 9))
+        sl.addWidget(lbl("TYPE PROB  (L < 0.5 < R)", 9))
         self.type_bar = self._make_bar(sl, self.ACCENT)
         self.type_val = lbl("0.00", 9, self.ACCENT)
         sl.addWidget(self.type_val)
@@ -408,10 +484,9 @@ class Graph:
         self.plots, self.curves = [], []
         for i in range(self.n_channels):
             p = self.plot_widget.addPlot(row=i, col=0)
-            p.setBackground(self.BG)
             p.showAxis('left', True)
             p.showAxis('bottom', i == self.n_channels - 1)
-            p.getAxis('left').setLabel(self.ch_names[i],
+            p.getAxis('left').setLabel(self.display_labels[i],
                                        color=self.DIM, size='8pt')
             p.getAxis('left').setWidth(52)
             for ax in ('left', 'bottom'):
@@ -441,9 +516,10 @@ class Graph:
 
     # ── update loop ───────────────────────────────────────────────────────────
     def update(self):
-        # EEG traces
+        # EEG traces — display in TRAINING_CHANNEL_ORDER so the on-screen
+        # trace layout mirrors what the model consumes row-by-row.
         data = self.board_shim.get_current_board_data(self.num_points)
-        for idx, ch in enumerate(self.exg_channels):
+        for idx, ch in enumerate(self.display_rows):
             if data.shape[1] == 0:
                 continue
             sig = data[ch].copy()

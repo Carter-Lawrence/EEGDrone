@@ -38,6 +38,8 @@ def load_all_subjects(root, segment_len=640):
 
             raw = mne.io.read_raw_edf(os.path.join(subj_dir, run),
                                       preload=True, verbose=False)
+            #T9, Af7, "Fp1", "C3", "C4", "Cz"
+            raw = raw.pick(["Fc3.", "Fcz.", "Fc4.", "C3..", "Cz..", "C4.."])
             raw.filter(8., 30., verbose=False)
 
             data = raw.get_data()
@@ -207,8 +209,8 @@ try:
 except KeyboardInterrupt:
     print("\n Training interrupted by user (Ctrl+C). Saving model...")
 finally:
-    model.save("eegnet_LR_3.h5")
-    print(" Model saved as eegnet_LR_3.h5")
+    model.save("eegnet_MR_5.h5")
+    print(" Model saved as eegnet_MR_5.h5")
 
 
 # ----------------------------x
@@ -221,5 +223,5 @@ for t in [0.2, 0.3, 0.4, 0.5]:
     acc = (preds == y_val).mean()
     print(f"Threshold {t:.2f} → accuracy {acc:.3f}")
 
-model.save("eegnet_MR_4.h5")
+model.save("eegnet_MR_5.h5")
 
