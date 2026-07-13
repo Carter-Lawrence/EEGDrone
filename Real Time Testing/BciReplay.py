@@ -62,7 +62,7 @@ NO_ARDUINO   = False
 ARDUINO_PORT = "/dev/cu.usbmodem2101"   # e.g. "/dev/cu.usbmodem14201"
 ARDUINO_BAUD = 9600
 WINDOW       = 6
-SHOW_GROUND  = True
+SHOW_GROUND  = False
 # ═════════════════════════════════════════════════════════════════════════════
 
 

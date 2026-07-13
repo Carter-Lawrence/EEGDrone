@@ -61,7 +61,7 @@ TYPE_THRESHOLD         = 0.5     # dead zone set in state machine (0.45 / 0.55)
 
 PREDICTION_SFREQ       = 256     # must match training sfreq
 PREDICTION_WINDOW_SAMP = 640     # 2.5 s @ 256 Hz
-PREDICTION_STRIDE_SAMP = 64      # 0.25 s stride
+PREDICTION_STRIDE_SAMP = 128      # 0.25 s stride
 
 # ── CHANNEL MAPPING ─────────────────────────────────────────────────────────
 # Must match the electrode order used in mne.pick() during training AND
@@ -122,15 +122,16 @@ class ArduinoLink:
             print(f"[Arduino] Could not open {port}: {e}")
 
     def send(self, command: bytes):
-        """Send a byte only when the command has changed."""
-        with self._lock:
-            if self._ser and self.connected and command != self._last_cmd:
-                try:
-                    self._ser.write(command)
-                    self._last_cmd = command
-                    print(f"[Arduino] → {command.decode()}")
-                except Exception as e:
-                    print(f"[Arduino] Write error: {e}")
+            """Send a byte only when the command has changed."""
+            with self._lock:
+                if self._ser and self.connected and command != self._last_cmd:
+                    try:
+                        self._ser.write(command)
+                        self._last_cmd = command
+                        print(f"[Arduino] → {command.decode()}")
+                    except Exception as e:
+                        print(f"[Arduino] Write error: {e}")
+                        self.connected = False   # ← stop retrying
 
     def close(self):
         with self._lock:
@@ -588,7 +589,7 @@ def main():
     p.add_argument('--file',          type=str, default='')
     p.add_argument('--master-board',  type=int, default=BoardIds.NO_BOARD)
     # Arduino
-    p.add_argument('--arduino-port',  type=str, default='',
+    p.add_argument('--arduino-port',  type=str, default="/dev/cu.usbmodem2101",
                    help="Arduino serial port, e.g. /dev/cu.usbmodem14201 or COM3")
     p.add_argument('--arduino-baud',  type=int, default=9600)
     args = p.parse_args()
