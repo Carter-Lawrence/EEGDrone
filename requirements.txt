@@ -1,0 +1,19 @@
+# Core deep learning
+tensorflow
+
+# EEG / signal processing
+mne
+mne-lsl
+brainflow
+
+# Scientific stack
+numpy
+scikit-learn
+
+# Real-time visualization
+pyqtgraph
+PyQt5
+matplotlib
+
+# Hardware I/O (Arduino serial)
+pyserial
