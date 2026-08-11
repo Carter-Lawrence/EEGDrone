@@ -15,7 +15,6 @@ Usage:
         --arduino-port /dev/cu.usbmodem14201 \\
         --arduino-baud 9600
 """
-
 import argparse
 import logging
 import os
