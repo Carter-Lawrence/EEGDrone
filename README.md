@@ -118,4 +118,4 @@ own with the scripts above.
 
 ## Notes & next steps
 
-Next steps for this project include testing the model in real time on a full 64 electrode setup, as the current model architecture after being trained on 64 channles from the training dataset indicate the full setup would boost accuracy by 8.95% and 9.5% for left vs. right and movement vs. rest respectively. A more interesting and economical test would be to use the 64 channel model to pick the best 16 channels to Daisy-chain to the live board, and test the accuracy live for those best 16 channels.  
+Next steps for this project include testing the model in real time on a full 64 electrode setup, as the current model architecture after being trained on 64 channles from the training dataset indicate the full setup would boost accuracy by 5.95% and 9.5% for left vs. right and movement vs. rest respectively. A more interesting and economical test would be to use the 64 channel model to pick the best 16 channels to Daisy-chain to the live board, and test the accuracy live for those best 16 channels.  

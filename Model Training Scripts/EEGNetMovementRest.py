@@ -1,6 +1,4 @@
-# ============================
 # REAL-TIME EEGNet BINARY BCI  —  MOVE vs REST  (6-channel)
-# ============================
 # Trained on the same run subset as the LR model for consistency:
 #   runs R03, R07, R11:  executed  left fist / right fist
 #   runs R04, R08, R12:  imagined  left fist / right fist
@@ -38,9 +36,7 @@ from sklearn.utils.class_weight import compute_class_weight
 mne.set_log_level('ERROR')
 tf.config.set_visible_devices([], 'GPU')
 
-# ----------------------------
-# CONFIG
-# ----------------------------
+#Configuration
 PICK_CHANNELS = ["Fc3.", "Fcz.", "Fc4.", "C3..", "Cz..", "C4.."]
 SFREQ         = 160
 SEGMENT_LEN   = 640
@@ -58,9 +54,7 @@ AUG_NOISE_STDDEV  = 0.02
 MIXUP_ALPHA       = 0.0      # off — was underfitting on the smaller dataset
 
 
-# ----------------------------
-# DATA LOADING  (hand-runs only; T0 + T1 + T2 all kept)
-# ----------------------------
+# Data loading  (hand-runs only; T0 + T1 + T2 all kept) 
 def _run_number(filename: str) -> int:
     m = re.search(r'R(\d+)\.edf$', filename)
     return int(m.group(1)) if m else -1
@@ -149,9 +143,7 @@ def load_mr_subjects(root, segment_len=SEGMENT_LEN,
     return X, y, subjects
 
 
-# ----------------------------
-# EEGNET MODEL
-# ----------------------------
+#EEGNet model architecture
 def EEGNet_V6(chans, samples):
     inp = Input(shape=(chans, samples, 1))
 
@@ -185,9 +177,7 @@ def EEGNet_V6(chans, samples):
     return Model(inp, out)
 
 
-# ----------------------------
-# AUGMENTATION
-# ----------------------------
+# Data augmentation functions
 def augment(x, y):
     shift = tf.random.uniform([], -AUG_TIME_SHIFT, AUG_TIME_SHIFT + 1,
                               dtype=tf.int32)
@@ -221,9 +211,7 @@ def mixup_batch(x, y, alpha=MIXUP_ALPHA):
     return x_mix, y_mix
 
 
-# ----------------------------
-# LOAD
-# ----------------------------
+# Load data
 DATA_ROOT = "/Users/carterlawrence/Downloads/files"
 
 X_all, y_all, subject_ids = load_mr_subjects(DATA_ROOT)
@@ -232,9 +220,7 @@ print(f"[Data] X shape = {X_all.shape}  (expect C={len(PICK_CHANNELS)})")
 y_binary = y_all.astype(np.int32)[:, np.newaxis]
 print(f"[Labels] REST(0): {(y_all==0).sum()}   MOVE(1): {(y_all==1).sum()}")
 
-# ----------------------------
-# SUBJECT-WISE SPLIT
-# ----------------------------
+# Subject-wise split
 gss = GroupShuffleSplit(test_size=0.2, n_splits=1, random_state=42)
 train_idx, val_idx = next(gss.split(X_all, y_binary, groups=subject_ids))
 
@@ -247,9 +233,7 @@ print(f"[Split] val-REST={   (y_val==0).sum()   }  val-MOVE={   (y_val==1).sum()
 class_weight_dict = {0: 1.0, 1: 2.0} 
 print(f"[ClassWeights] {class_weight_dict}")
 
-# ----------------------------
-# DATASETS
-# ----------------------------
+# Datasets
 AUTOTUNE = tf.data.AUTOTUNE
 
 train_ds = (tf.data.Dataset
@@ -266,9 +250,7 @@ val_ds = (tf.data.Dataset
           .batch(BATCH_SIZE)
           .prefetch(AUTOTUNE))
 
-# ----------------------------
-# TRAIN
-# ----------------------------
+# Train
 model = EEGNet_V6(chans=X_all.shape[1], samples=X_all.shape[2])
 
 model.compile(
@@ -312,9 +294,7 @@ finally:
     model.save("eegnet_MR_4.h5")
     print("Saved: eegnet_MR_4.h5")
 
-# ----------------------------
-# VAL DIAGNOSTICS
-# ----------------------------
+# Validation diagnostics
 probs = model.predict(X_val, batch_size=128, verbose=0)
 print("\n===== VAL THRESHOLD SWEEP =====")
 print(f"Prob distribution on val: mean={probs.mean():.3f}  "

@@ -1,6 +1,4 @@
-# ============================
 # REAL-TIME EEGNet BINARY BCI  —  LEFT vs RIGHT HAND  (6-channel)
-# ============================
 # CRITICAL FIX: PhysioNet EEGMMI has 4 MI task types that share T1/T2 labels:
 #   runs R03, R07, R11:  executed  left fist (T1) vs right fist (T2)   ← keep
 #   runs R04, R08, R12:  imagined  left fist (T1) vs right fist (T2)   ← keep
@@ -9,12 +7,10 @@
 # Previous training mixed all of them, so "LEFT" was polluted with
 # "both fists" trials and "RIGHT" with "both feet" trials — that's what
 # caused the inference-time LEFT-bias.
-# ============================
 # Also includes:
 #   - Overlapping sliding windows  (≈4× more training data per trial)
 #   - On-the-fly augmentation       (time-shift + gaussian noise)
 #   - Mixup                         (soft labels, smoother decision boundary)
-# ============================
 
 import os
 import re
@@ -37,9 +33,7 @@ from sklearn.utils.class_weight import compute_class_weight
 mne.set_log_level('ERROR')
 tf.config.set_visible_devices([], 'GPU')
 
-# ----------------------------
-# CONFIG
-# ----------------------------
+# Configuration
 PICK_CHANNELS = ["Fc3.", "Fcz.", "Fc4.", "C3..", "Cz..", "C4.."]
 SFREQ         = 160
 SEGMENT_LEN   = 640
@@ -56,9 +50,7 @@ AUG_NOISE_STDDEV  = 0.02
 MIXUP_ALPHA       = 0.0
 
 
-# ----------------------------
-# DATA LOADING  (LR-only runs, overlapping windows)
-# ----------------------------
+# Data loading  (LR-only runs, overlapping windows)
 def _run_number(filename: str) -> int:
     m = re.search(r'R(\d+)\.edf$', filename)
     return int(m.group(1)) if m else -1
@@ -124,9 +116,7 @@ def load_lr_subjects(root, segment_len=SEGMENT_LEN,
     return X, y, subjects
 
 
-# ----------------------------
-# EEGNET MODEL
-# ----------------------------
+# EEGNet model architecture
 def EEGNet_V6(chans, samples):
     inp = Input(shape=(chans, samples, 1))
 
@@ -160,9 +150,7 @@ def EEGNet_V6(chans, samples):
     return Model(inp, out)
 
 
-# ----------------------------
-# AUGMENTATION
-# ----------------------------
+# Data augmentation functions
 def augment(x, y):
     shift = tf.random.uniform([], -AUG_TIME_SHIFT, AUG_TIME_SHIFT + 1,
                               dtype=tf.int32)
@@ -196,9 +184,8 @@ def mixup_batch(x, y, alpha=MIXUP_ALPHA):
     return x_mix, y_mix
 
 
-# ----------------------------
-# LOAD
-# ----------------------------
+
+# Load data
 DATA_ROOT = "/Users/carterlawrence/Downloads/files"
 
 X_all, y_lr, subject_ids = load_lr_subjects(DATA_ROOT)
@@ -208,9 +195,7 @@ print(f"[Data] X shape = {X_all.shape}  (expect C={len(PICK_CHANNELS)})")
 y_binary = y_lr.astype(np.int32)[:, np.newaxis]
 print(f"[Labels] LEFT(0): {(y_lr == 0).sum()}   RIGHT(1): {(y_lr == 1).sum()}")
 
-# ----------------------------
-# SUBJECT-WISE SPLIT
-# ----------------------------
+# Subject-wise split
 gss = GroupShuffleSplit(test_size=0.2, n_splits=1, random_state=42)
 train_idx, val_idx = next(gss.split(X_all, y_binary, groups=subject_ids))
 
@@ -220,9 +205,7 @@ print(f"[Split] train={len(X_train)}  val={len(X_val)}")
 print(f"[Split] train-LEFT={ (y_train==0).sum() }  train-RIGHT={ (y_train==1).sum() }")
 print(f"[Split] val-LEFT={   (y_val==0).sum()   }  val-RIGHT={   (y_val==1).sum()   }")
 
-# ----------------------------
-# DATASETS
-# ----------------------------
+# Datasets
 AUTOTUNE = tf.data.AUTOTUNE
 
 train_ds = (tf.data.Dataset
@@ -239,9 +222,7 @@ val_ds = (tf.data.Dataset
           .batch(BATCH_SIZE)
           .prefetch(AUTOTUNE))
 
-# ----------------------------
-# TRAIN
-# ----------------------------
+# Train model
 model = EEGNet_V6(chans=X_all.shape[1], samples=X_all.shape[2])
 
 model.compile(
@@ -284,9 +265,7 @@ finally:
     model.save("eegnet_LR_4.h5")
     print("Saved: eegnet_LR_4.h5")
 
-# ----------------------------
-# VAL DIAGNOSTICS
-# ----------------------------
+# Validation diagnostics
 probs = model.predict(X_val, batch_size=128, verbose=0)
 print("\n===== VAL THRESHOLD SWEEP =====")
 print(f"Prob distribution on val: mean={probs.mean():.3f}  "
@@ -296,19 +275,3 @@ for t in [0.3, 0.4, 0.5, 0.55, 0.6, 0.7]:
     preds = (probs > t).astype(int)
     acc = (preds == y_val).mean()
     print(f"Threshold {t:.2f} → accuracy {acc:.3f}")
-
-# ============================================================================
-# LABEL CONVENTION (IMPORTANT):
-#   LEFT  = 0  (low probability,  below 0.5)
-#   RIGHT = 1  (high probability, above 0.5)
-#
-# In BciReplay.py / bci_live.py the mapping should be:
-#
-#     if ts > TYPE_THRESHOLD:
-#         direction = "RIGHT"
-#     elif ts < (1 - TYPE_THRESHOLD):
-#         direction = "LEFT"
-#
-# This is the ORIGINAL (non-flipped) mapping.  If either file currently has
-# the flipped version, flip it back.
-# ============================================================================

@@ -47,8 +47,8 @@ except ImportError:
 #  CONFIGURATION  (edit here or pass as CLI args)
 #  — synced to BciReplay.py —
 # ═════════════════════════════════════════════════════════════════════════════
-MOVEMENT_MODEL_PATH    = "eegnet_MR_5.h5"
-TYPE_MODEL_PATH        = "eegnet_LR_4.h5"
+MOVEMENT_MODEL_PATH    = "YOUR MODEL HERE"
+TYPE_MODEL_PATH        = "YOUR MODEL HERE"
 
 MOVE_THRESHOLD_ON      = 0.5
 MOVE_THRESHOLD_OFF     = 0.5

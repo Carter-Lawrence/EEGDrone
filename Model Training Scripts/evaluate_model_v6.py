@@ -13,19 +13,17 @@ from sklearn.metrics import confusion_matrix, classification_report
 
 from load_data_v6 import load_all_subjects
 
-# ------------------------
-# CONFIG
-# ------------------------
-TASK        = "LR"                 # "MR" or "LR"
-MODEL_PATH  = "eegnet_LR_4.h5"     # or eegnet_LR_4.h5
-DATA_ROOT   = "/Users/carterlawrence/Downloads/files"
+# Configuration
+TASK        = "LR"                 # add "MR" for movement recognition, "LR" for left/right
+MODEL_PATH  = "MODEL PATH HERE"     
+DATA_ROOT   = "FILE PATH HERE"
 
 mne.set_log_level('ERROR')
 tf.config.set_visible_devices([], 'GPU')
 
-# ------------------------
-# LOAD DATA  (run-filtered to match training)
-# ------------------------
+
+# Load Data
+#Using same preprocessing as the training scripts to ensure the evaluation distribution matches
 X, y, subjects = load_all_subjects(DATA_ROOT, task=TASK)
 print(f"[Eval] X shape from loader = {X.shape}")
 
@@ -37,36 +35,26 @@ if X.ndim == 3:
     X = X[..., np.newaxis]
 print(f"[Eval] X shape to model = {X.shape}   (expect (N, 6, 640, 1))")
 
-# ------------------------
-# LOAD MODEL
-# ------------------------
+# Load Model
 model = tf.keras.models.load_model(MODEL_PATH)
 print(f"[Eval] Loaded {MODEL_PATH}  "
       f"(input_shape={model.input_shape})")
 
-# ------------------------
-# PREDICT
-# ------------------------
+# Predict
 probs = model.predict(X, batch_size=128, verbose=0).squeeze()
 preds = (probs > 0.5).astype(int)
 
-# ------------------------
-# DISTRIBUTIONS
-# ------------------------
+# Class Distributions for evaluation
 print("\n===== CLASS DISTRIBUTIONS =====")
 print("True labels:", np.bincount(y_bin, minlength=2))
 print("Predictions:", np.bincount(preds, minlength=2))
 
-# ------------------------
-# CONFUSION MATRIX
-# ------------------------
+# Confusion Matrix for evaluation
 cm = confusion_matrix(y_bin, preds, labels=[0, 1])
 print("\n===== CONFUSION MATRIX =====")
 print(cm)
 
-# ------------------------
-# PER-CLASS ACCURACY
-# ------------------------
+# Per-class accuracy for evaluation
 print("\n===== PER-CLASS ACCURACY (threshold=0.50) =====")
 class_names = ("REST", "MOVE") if TASK == "MR" else ("LEFT", "RIGHT")
 for i in (0, 1):
@@ -74,18 +62,14 @@ for i in (0, 1):
     acc = cm[i, i] / row_sum if row_sum else 0.0
     print(f"{class_names[i]} accuracy: {acc:.3f}")
 
-# ------------------------
-# FULL REPORT
-# ------------------------
+# Full classification report for evaluation
 print("\n===== CLASSIFICATION REPORT =====")
 print(classification_report(y_bin, preds, digits=4,
                             target_names=list(class_names)))
 
-# ------------------------
-# BALANCED-ACCURACY THRESHOLD SWEEP
-# ------------------------
-# On a class-imbalanced eval set, overall accuracy is misleading —
-# a model that always predicts the majority class looks "good".
+# Balanced-accuracy threshold sweep for evaluation
+# On a class-imbalanced eval set, overall accuracy is misleading
+# Ex: a model that always predicts the majority class looks "good".
 # Balanced accuracy = mean of per-class accuracies, which is what
 # you actually care about for a BCI.
 print("\n===== BALANCED THRESHOLD SWEEP =====")

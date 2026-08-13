@@ -32,8 +32,8 @@ except ImportError:
 # ═════════════════════════════════════════════════════════════════════════════
 #  CONFIGURATION
 # ═════════════════════════════════════════════════════════════════════════════
-MOVEMENT_MODEL_PATH    = "eegnet_MR_5.h5"
-TYPE_MODEL_PATH        = "eegnet_LR_4.h5"
+MOVEMENT_MODEL_PATH    = "YOUR MODEL HERE"
+TYPE_MODEL_PATH        = "YOUR MODEL HERE"
 
 # Channel pick — MUST match the training scripts' PICK_CHANNELS and
 # bci_live.py's TRAINING_CHANNEL_ORDER (after mapping labels).
