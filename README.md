@@ -57,8 +57,7 @@ and streams decoded commands to the Arduino.
 | Deployed (motor cortex subset) | 6 | 67.75% | 75.2% |
 | Full montage | 64 | 73.7% | 84.7% |
 
-Chance is 50% on both tasks. Evaluated on held-out subjects (grouped split so no
-subject appears in both train and test).
+Chance is 50% on both tasks. Evaluated on all subjects.
 
 ## Repo layout
 
