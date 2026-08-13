@@ -50,10 +50,8 @@ MIN_MOVE_FRAMES        = 2
 MIN_REST_FRAMES        = 2
 SMOOTH_WINDOW          = 8
 TYPE_THRESHOLD         = 0.5     # dead zone set in state machine (0.45 / 0.55)
-
-PREDICTION_SFREQ       = 256     # must match training sfreq
 PREDICTION_WINDOW_SAMP = 640     # 2.5 s @ 256 Hz
-PREDICTION_STRIDE_SAMP = 128      # 0.25 s stride
+PREDICTION_STRIDE_SAMP = 64      # 0.25 s stride
 
 # Channel mapping
 # Must match the electrode order used in mne.pick() during training AND
