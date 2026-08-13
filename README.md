@@ -52,10 +52,13 @@ and streams decoded commands to the Arduino.
 
 ## Results
 
-<!-- TODO: fill in your real numbers from evaluate_model_v6.py -->
-- Left vs. Right accuracy: `TODO`
-- Move vs. Rest accuracy: `TODO`
-- Evaluated with subject-held-out splits on the PhysioNet dataset.
+| Config | Channels | Left vs. Right | Move vs. Rest |
+|---|---|---|---|
+| Deployed (motor cortex subset) | 6 | 67.75% | 75.2% |
+| Full montage | 64 | 73.7% | 84.7% |
+
+Chance is 50% on both tasks. Evaluated on held-out subjects (grouped split so no
+subject appears in both train and test).
 
 ## Repo layout
 
@@ -65,7 +68,7 @@ Model Training Scripts/
   EEGNetMovementRest.py   # train the Move/Rest classifier
   load_data_v6.py         # shared data loader (run-filtered to match training)
   evaluate_model_v6.py    # offline evaluation + threshold sweep
-  LRBias.py / MRBias.py   # bias / sanity checks on trained models
+  LRBias.py / MRBias.py   # bias/sanity checks on trained models
 
 Real Time Testing/
   BciLive.py              # live board -> models -> Arduino
@@ -110,11 +113,9 @@ own with the scripts above.
 
 ## Hardware
 
-<!-- TODO: confirm/adjust -->
-- OpenBCI Cyton board (8-channel), 6 channels used over motor cortex
+- OpenBCI Cyton board (8-channel), 6 channels used over motor cortex, 2 channels as baseline on earlobes
 - Arduino (serial, 9600 baud) driving the movement output
 
 ## Notes & next steps
 
-<!-- Optional but great for interviews: a sentence or two on what you'd improve.
-e.g. per-subject calibration, a third command, tighter latency, session logging. -->
+Next steps for this project include testing the model in real time on a full 64 electrode setup, as the current model architecture after being trained on 64 channles from the training dataset indicate the full setup would boost accuracy by 8.95% and 9.5% for left vs. right and movement vs. rest respectively. A more interesting and economical test would be to use the 64 channel model to pick the best 16 channels to Daisy-chain to the live board, and test the accuracy live for those best 16 channels.  
