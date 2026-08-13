@@ -47,7 +47,6 @@ def load_all_subjects(root, task="MR", segment_len=640, stride=None):
     Load windows for the given task, run-filtered to match training.
 
     Parameters
-    ----------
     root : path to the PhysioNet EEGMMI root directory
     task : "MR" or "LR"
     segment_len : samples per window (640 = 4.0 s @ 160 Hz)

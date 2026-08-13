@@ -1,14 +1,11 @@
 """
 bci_live.py  —  Real-time EEG visualisation + EEGNet prediction + Arduino output
-==================================================================================
 Connects to an OpenBCI Cyton board via BrainFlow, runs two EEGNet binary
 classifiers in a background thread, and sends decoded commands to an Arduino
 over a serial port:
-
     0  →  REST
     1  →  LEFT
     2  →  RIGHT
-
 Usage:
     python bci_live.py \\
         --serial-port  /dev/cu.usbserial-DP05IYGX \\
@@ -43,10 +40,7 @@ except ImportError:
     SERIAL_AVAILABLE = False
     print("[WARN] pyserial not installed – Arduino output disabled. pip install pyserial")
 
-# ═════════════════════════════════════════════════════════════════════════════
-#  CONFIGURATION  (edit here or pass as CLI args)
-#  — synced to BciReplay.py —
-# ═════════════════════════════════════════════════════════════════════════════
+# Configuration, must be the same as used during training for correct operation
 MOVEMENT_MODEL_PATH    = "YOUR MODEL HERE"
 TYPE_MODEL_PATH        = "YOUR MODEL HERE"
 
@@ -61,7 +55,7 @@ PREDICTION_SFREQ       = 256     # must match training sfreq
 PREDICTION_WINDOW_SAMP = 640     # 2.5 s @ 256 Hz
 PREDICTION_STRIDE_SAMP = 128      # 0.25 s stride
 
-# ── CHANNEL MAPPING ─────────────────────────────────────────────────────────
+# Channel mapping
 # Must match the electrode order used in mne.pick() during training AND
 # the physical wiring of your Cyton headset.
 #
@@ -82,8 +76,6 @@ TRAINING_CHANNEL_ORDER = ["FC3", "FCz", "FC4", "C3", "Cz", "C4"]
 CMD_REST  = b'0'
 CMD_LEFT  = b'1'
 CMD_RIGHT = b'2'
-# ═════════════════════════════════════════════════════════════════════════════
-
 
 def preprocess_for_model(data: np.ndarray, sfreq: float) -> np.ndarray:
     """Band-pass 8–30 Hz + per-channel z-score → (1, C, T, 1)."""
@@ -94,8 +86,6 @@ def preprocess_for_model(data: np.ndarray, sfreq: float) -> np.ndarray:
     std  = data.std(axis=1,  keepdims=True) + 1e-6
     return ((data - mean) / std)[np.newaxis, ..., np.newaxis]   # (1,C,T,1)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 class ArduinoLink:
     """Thread-safe Arduino serial writer.  Sends only when command changes."""
 
@@ -137,7 +127,6 @@ class ArduinoLink:
                 self._ser.close()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 class PredictionEngine:
     """Runs EEGNet inference in a background thread and drives Arduino output."""
 
@@ -149,7 +138,7 @@ class PredictionEngine:
         self.arduino      = arduino
         self.running      = False
 
-        # ── Build the channel-reorder index map ──────────────────────────
+        # Build the channel-reorder index map 
         # Goal: produce an array of BrainFlow row indices such that
         # self._buf[i] corresponds to TRAINING_CHANNEL_ORDER[i].
         label_to_pin = {v: k for k, v in CYTON_CHANNEL_MAP.items()}
@@ -194,7 +183,7 @@ class PredictionEngine:
                 print("[Model] Loading type model …")
                 self._ty_model = load_model(TYPE_MODEL_PATH, compile=False)
 
-                # ── sanity-check model channel count ─────────────────────
+                # sanity-check model channel
                 # EEGNet input is (None, C, T, 1); channel dim is index 1.
                 for name, m in [("movement", self._mv_model),
                                 ("type",     self._ty_model)]:
@@ -230,7 +219,7 @@ class PredictionEngine:
     def stop(self):
         self.running = False
 
-    # ── internal ──────────────────────────────────────────────────────────────
+    # Internal methods
     def _loop(self):
         stride = PREDICTION_STRIDE_SAMP
         while self.running:
@@ -265,7 +254,7 @@ class PredictionEngine:
         ts = self.type_prob_smooth
 
         if not self.movement_state:
-            # ── waiting for movement onset ────────────────────────────────
+            # waiting for movement onset
             if ms > MOVE_THRESHOLD_ON:
                 self._move_counter += 1
                 if self._move_counter >= MIN_MOVE_FRAMES:
@@ -280,7 +269,7 @@ class PredictionEngine:
                 self.arduino.send(CMD_REST)        # ← Arduino: 0
 
         else:
-            # ── movement active ───────────────────────────────────────────
+            # movement active
             if ms < MOVE_THRESHOLD_OFF:
                 self._rest_counter += 1
                 if self._rest_counter >= MIN_REST_FRAMES:
@@ -322,8 +311,8 @@ class PredictionEngine:
                 "arduino_ok": self.arduino.connected,
             }
 
-
-# ─────────────────────────────────────────────────────────────────────────────
+# Graphical interface for real-time EEG visualization and control
+#Used Claude for this FYI, have not checked or read over code
 class Graph:
     BG      = "#0d1117"
     PANEL   = "#161b22"
@@ -375,7 +364,6 @@ class Graph:
         timer.start(50)
         QtWidgets.QApplication.instance().exec()
 
-    # ── UI ────────────────────────────────────────────────────────────────────
     def _build_ui(self):
         pg.setConfigOption('background', self.BG)
         pg.setConfigOption('foreground', self.TEXT)
@@ -513,7 +501,7 @@ class Graph:
         c, b = bar_tuple
         b.setFixedWidth(int(np.clip(value, 0, 1) * c.width()))
 
-    # ── update loop ───────────────────────────────────────────────────────────
+    # Update loop
     def update(self):
         # EEG traces — display in TRAINING_CHANNEL_ORDER so the on-screen
         # trace layout mirrors what the model consumes row-by-row.
@@ -567,7 +555,6 @@ class Graph:
         self.app.processEvents()
 
 
-# ═════════════════════════════════════════════════════════════════════════════
 def main():
     BoardShim.enable_dev_board_logger()
     logging.basicConfig(level=logging.DEBUG)

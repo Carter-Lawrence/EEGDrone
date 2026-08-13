@@ -15,8 +15,8 @@ from load_data_v6 import load_all_subjects
 
 # Configuration
 TASK        = "LR"                 # add "MR" for movement recognition, "LR" for left/right
-MODEL_PATH  = "MODEL PATH HERE"     
-DATA_ROOT   = "FILE PATH HERE"
+MODEL_PATH  = "MODEL NAME HERE"     
+DATA_ROOT   = "YOUR FILE PATH FOR DATASET HERE"
 
 mne.set_log_level('ERROR')
 tf.config.set_visible_devices([], 'GPU')

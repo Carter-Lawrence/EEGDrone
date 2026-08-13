@@ -29,11 +29,8 @@ except ImportError:
     SERIAL_AVAILABLE = False
     print("[WARN] pyserial not installed.")
 
-# ═════════════════════════════════════════════════════════════════════════════
-#  CONFIGURATION
-# ═════════════════════════════════════════════════════════════════════════════
-MOVEMENT_MODEL_PATH    = "YOUR MODEL HERE"
-TYPE_MODEL_PATH        = "YOUR MODEL HERE"
+MOVEMENT_MODEL_PATH    = "YOUR MODEL NAME HERE"
+TYPE_MODEL_PATH        = "YOUR MODEL NAME HERE"
 
 # Channel pick — MUST match the training scripts' PICK_CHANNELS and
 # bci_live.py's TRAINING_CHANNEL_ORDER (after mapping labels).
@@ -42,12 +39,12 @@ PICK_CHANNELS = ["Fc3.", "Fcz.", "Fc4.", "C3..", "Cz..", "C4.."]
 
 MOVE_THRESHOLD_ON  = 0.5
 MOVE_THRESHOLD_OFF = 0.5
-MIN_MOVE_FRAMES        = 2      # keep — this is what's preventing FPs
-MIN_REST_FRAMES        = 2      # keep
-SMOOTH_WINDOW          = 8     # keep
-TYPE_THRESHOLD         = 0.5   # keep — this is now correct
-PREDICTION_WINDOW_SAMP = 640    # try 2.0s instead of 2.5s for faster response
-PREDICTION_STRIDE_SAMP = 64   # smaller = more predictions per second
+MIN_MOVE_FRAMES        = 2     
+MIN_REST_FRAMES        = 2      
+SMOOTH_WINDOW          = 8     
+TYPE_THRESHOLD         = 0.5   
+PREDICTION_WINDOW_SAMP = 640    
+PREDICTION_STRIDE_SAMP = 64   
 
 CMD_REST  = b'0'
 CMD_LEFT  = b'1'
@@ -56,14 +53,13 @@ CMD_RIGHT = b'2'
 LABEL_MAP = {0: "REST", 1: "LEFT", 2: "RIGHT"}
 EVENT_MAP = {"T0": 0, "T1": 1, "T2": 2}
 
-PATH         = "/Users/carterlawrence/Downloads/files/S001/S001R03.edf"
+PATH         = "YOUR FILE PATH HERE"  # Ex: "/Users/carterlawrence/Downloads/files/S001/S001R03.edf"
 SPEED        = 1.0
 NO_ARDUINO   = False
-ARDUINO_PORT = "/dev/cu.usbmodem2101"   # e.g. "/dev/cu.usbmodem14201"
+ARDUINO_PORT = "YOUR USB PORT HERE"   # Ex: "/dev/cu.usbmodem2101"
 ARDUINO_BAUD = 9600
 WINDOW       = 6
 SHOW_GROUND  = False
-# ═════════════════════════════════════════════════════════════════════════════
 
 
 class ArduinoLink:

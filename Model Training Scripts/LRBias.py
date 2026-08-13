@@ -51,43 +51,32 @@ def load_all_subjects(root, segment_len=640):
 
     return X, y, subjects
 
-DATA_ROOT = "/Users/carterlawrence/Downloads/files"
+DATA_ROOT = "YOUR FILE PATH FOR DATASET HERE"
 
 X_all, y_all, subject_ids = load_all_subjects(DATA_ROOT)
-print("test 123")
-# ----------------------------
-# LOAD MODEL
-# ----------------------------
+
+#Load Model
 model = load_model("eegnet_LR_4.h5")
-print("load model")
-# ----------------------------
-# SELECT ONLY LEFT vs RIGHT
-# ----------------------------
+
+# Select only LEFT vs RIGHT trials
 mask = (y_all == 1) | (y_all == 2)
 X_lr = X_all[mask]
 y_lr = y_all[mask]
 y_lr_bin = (y_lr == 1).astype(int)  # LEFT=1, RIGHT=0
 
-# ----------------------------
-# PREDICT
-# ----------------------------
-print("predicting")
+# Predict using the model
 probs = model.predict(X_lr)
-print("done")
 preds = (probs > 0.5).astype(int).squeeze()  # threshold at 0.5
 
 print("Class distribution:", np.bincount(y_lr_bin))
 print("Model prediction distribution:", np.bincount(preds))
-# ----------------------------
-# CONFUSION MATRIX
-# ----------------------------
+
+# Compute confusion matrix
 cm = confusion_matrix(y_lr_bin, preds)
 print("Confusion Matrix:")
 print(cm)
 
-# ----------------------------
-# PER-CLASS ACCURACY
-# ----------------------------
+# Compute per-class accuracy
 for i in range(cm.shape[0]):
     acc = cm[i, i] / cm[i].sum()
     print(f"Class {i} accuracy: {acc:.3f}")

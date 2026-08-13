@@ -50,19 +50,16 @@ def load_all_subjects(root, segment_len=640):
 
     return X, y, subjects
 
-DATA_ROOT = "/Users/carterlawrence/Downloads/files"
+DATA_ROOT = "YOUR FILE PATH FOR DATASET HERE"
 
 X_all, y_all, subject_ids = load_all_subjects(DATA_ROOT)
 print("test 123")
-# ----------------------------
-# LOAD MODEL
-# ----------------------------
+
+# Load model
 model = load_model("eegnet_MR_4.h5")
 print("load model")
-# ============================
-# MOVEMENT vs REST EVALUATION
-# ============================
 
+# Evaluate movement vs rest
 # movement=1, rest=0
 y_mr = (y_all != 0).astype(int)
 
